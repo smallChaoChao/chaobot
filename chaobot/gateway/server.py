@@ -6,6 +6,7 @@ from typing import Any
 
 from rich.console import Console
 
+from chaobot.channels.feishu import FeishuChannel
 from chaobot.config.manager import ConfigManager
 
 console = Console()
@@ -69,10 +70,11 @@ class GatewayServer:
             asyncio.create_task(channel.stop())
 
     def _init_channels(self) -> None:
-        """Initialize enabled channels."""
-        # TODO: Initialize channels based on config
-        # This is a placeholder - implement actual channel initialization
-        pass
+        """Initialize enabled channels based on configuration."""
+        # Initialize Feishu channel if enabled
+        if self.config.channels.feishu.enabled:
+            self.channels.append(FeishuChannel(self.config))
+            console.print("✓ Feishu channel initialized")
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         """Handle signals.

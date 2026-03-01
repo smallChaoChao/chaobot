@@ -66,11 +66,24 @@ class DiscordChannelConfig(BaseModel):
     allow_from: list[str] = Field(default_factory=list)
 
 
+class FeishuChannelConfig(BaseModel):
+    """Feishu/Lark channel configuration."""
+
+    enabled: bool = False
+    app_id: str | None = None
+    app_secret: str | None = None
+    webhook_url: str | None = None
+    bot_name: str = "chaobot"
+    encrypt_key: str | None = None
+    allow_from: list[str] = Field(default_factory=list)
+
+
 class ChannelsConfig(BaseModel):
     """All channel configurations."""
 
     telegram: TelegramChannelConfig = Field(default_factory=TelegramChannelConfig)
     discord: DiscordChannelConfig = Field(default_factory=DiscordChannelConfig)
+    feishu: FeishuChannelConfig = Field(default_factory=FeishuChannelConfig)
 
 
 class MCPServerConfig(BaseModel):
