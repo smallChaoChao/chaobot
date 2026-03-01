@@ -146,14 +146,25 @@ class FeishuChannel(BaseChannel):
         else:
             receive_id_type = "open_id"
 
-        # Build request
+        # Build request with markdown support
+        # Feishu supports markdown in post messages
         request = CreateMessageRequest.builder() \
             .receive_id_type(receive_id_type) \
             .request_body(
                 CreateMessageRequestBody.builder()
                 .receive_id(to)
-                .msg_type("text")
-                .content(json.dumps({"text": message}))
+                .msg_type("post")
+                .content(json.dumps({
+                    "zh_cn": {
+                        "title": "",
+                        "content": [
+                            [{
+                                "tag": "text",
+                                "text": message
+                            }]
+                        ]
+                    }
+                }, ensure_ascii=False))
                 .build()
             ) \
             .build()

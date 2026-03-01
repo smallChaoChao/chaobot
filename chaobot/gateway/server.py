@@ -108,24 +108,27 @@ class GatewayServer:
 
                 # Process with LLM
                 try:
-                    # Send "processing" message first
-                    processing_msg = OutboundMessage(
-                        id=msg.id + "_processing",
-                        channel=msg.channel,
-                        recipient_id=msg.chat_id,
-                        content="🤖 正在思考...",
-                        reply_to=msg.id
-                    )
-                    await bus.outbound.put(processing_msg)
-
                     response = await self.agent_loop.run(content, session_id=msg.chat_id)
                     response_text = response.get("content", "")
 
-                    # Add tool execution info if available
+                    # Format response with tool execution info
                     logs = response.get("logs", [])
                     if logs and len(logs) > 1:
-                        tool_info = "\n".join([f"🔧 {log}" for log in logs[1:]])
-                        response_text = f"{tool_info}\n\n{response_text}"
+                        # Build formatted tool execution info
+                        tool_lines = []
+                        for log in logs[1:]:  # Skip first "Iteration 1"
+                            if "Tool calls:" in log:
+                                # Extract tool names
+                                tool_names = log.replace("Tool calls: ", "").strip("[]")
+                                tool_lines.append(f"🔧 调用工具: {tool_names}")
+                            elif "Iteration" in log:
+                                tool_lines.append(f"🔄 {log}")
+                            else:
+                                tool_lines.append(f"📋 {log}")
+
+                        if tool_lines:
+                            tool_info = "\n".join(tool_lines)
+                            response_text = f"**🤖 处理过程：**\n{tool_info}\n\n**💡 回答：**\n{response_text}"
 
                 except Exception as e:
                     console.print(f"[red]❌ LLM error: {e}[/red]")
