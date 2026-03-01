@@ -15,8 +15,8 @@ class ProviderConfig(BaseModel):
     enabled: bool = Field(default=True, alias="enabled")
     api_key: str | None = Field(default=None, alias="api_key")
     api_base: str | None = Field(default=None, alias="api_base")
-    timeout: int = Field(default=60, alias="timeout")
-    max_retries: int = Field(default=3, alias="max_retries")
+    timeout: int = Field(default=120, alias="timeout")
+    max_retries: int = Field(default=5, alias="max_retries")
     rate_limit_rpm: int | None = Field(default=None, alias="rate_limit_rpm")
 
 

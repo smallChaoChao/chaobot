@@ -148,13 +148,103 @@ class GatewayServer:
         """
         bus = get_bus()
 
-        # Create AgentRunner with logs enabled
+        # Create AgentRunner with streaming disabled
         runner = AgentRunner(
             show_logs=self.show_logs,
             use_markdown=True,
-            stream=False,  # Server mode doesn't use streaming
+            stream=False,  # Disable streaming for more reliable tool support
             session_id=session_id
         )
+
+        # Use non-streaming mode for reliable tool support
+        await self._process_message_non_streaming(
+            runner, message, session_id, channel, msg_id
+        )
+
+    async def _process_message_streaming(
+        self,
+        runner: AgentRunner,
+        message: str,
+        session_id: str,
+        channel: str,
+        msg_id: str
+    ) -> None:
+        """Process message with streaming output.
+
+        Args:
+            runner: AgentRunner instance
+            message: Message content
+            session_id: Session ID
+            channel: Channel name
+            msg_id: Message ID
+        """
+        bus = get_bus()
+        full_content = ""
+        buffer = ""
+        tool_call_detected = False
+        last_sent_content = ""
+
+        # Stream the response
+        async for chunk in runner.loop.run_stream(message, session_id=session_id):
+            buffer += chunk
+            full_content += chunk
+
+            # Check for tool call patterns
+            if not tool_call_detected:
+                if '"tool_calls"' in buffer or '"function"' in buffer:
+                    tool_call_detected = True
+                    break
+
+                # Send chunks periodically (every 20 chars or on punctuation)
+                if len(buffer) >= 20 or any(c in chunk for c in '。！？.!?'):
+                    if buffer != last_sent_content:
+                        outbound_msg = OutboundMessage(
+                            id=f"{msg_id}_stream_{hash(buffer) & 0xFFFFFFFF}",
+                            channel=channel,
+                            recipient_id=session_id,
+                            content=buffer,
+                            reply_to=msg_id
+                        )
+                        await bus.outbound.put(outbound_msg)
+                        last_sent_content = buffer
+
+        # If tool call detected, fall back to non-streaming
+        if tool_call_detected:
+            if self.show_logs:
+                console.print("[dim]Detected tool call, switching to non-streaming mode...[/dim]")
+            await self._process_message_non_streaming(
+                runner, message, session_id, channel, msg_id
+            )
+        else:
+            # Send any remaining content
+            if buffer and buffer != last_sent_content:
+                outbound_msg = OutboundMessage(
+                    id=f"{msg_id}_final",
+                    channel=channel,
+                    recipient_id=session_id,
+                    content=buffer,
+                    reply_to=msg_id
+                )
+                await bus.outbound.put(outbound_msg)
+
+    async def _process_message_non_streaming(
+        self,
+        runner: AgentRunner,
+        message: str,
+        session_id: str,
+        channel: str,
+        msg_id: str
+    ) -> None:
+        """Process message with non-streaming output (for tool calls).
+
+        Args:
+            runner: AgentRunner instance
+            message: Message content
+            session_id: Session ID
+            channel: Channel name
+            msg_id: Message ID
+        """
+        bus = get_bus()
 
         # Track if we've sent any progress message
         progress_sent = False
@@ -162,13 +252,7 @@ class GatewayServer:
 
         # Define progress callback that sends messages to user in real-time
         async def on_progress(content: str, is_tool_hint: bool) -> None:
-            """Handle progress updates and send to user.
-
-            Args:
-                content: Progress message content
-                is_tool_hint: True if this is a tool execution hint (internal),
-                             False if this is assistant's natural language output
-            """
+            """Handle progress updates and send to user."""
             nonlocal progress_sent, last_progress_content
 
             # Skip iteration messages
@@ -182,19 +266,12 @@ class GatewayServer:
 
             # Log tool execution to console (for debugging)
             if is_tool_hint and self.show_logs:
-                if content.startswith("Executing "):
-                    match = content[len("Executing "):]
-                    if "(" in match:
-                        name = match.split("(")[0]
-                        args_str = match.split("(")[1].rstrip(")")
-                        if len(args_str) > 50:
-                            args_str = args_str[:50] + "..."
-                        console.print(f"  ↳ tool({name}) -> {args_str}")
+                if content.startswith("  ↳ "):
+                    console.print(f"[dim]{content}[/dim]")
                 else:
                     console.print(f"  ↳ {content}")
 
             # Send assistant's natural language output to user (not tool hints)
-            # is_tool_hint=False means this is the assistant's thinking/reasoning
             if not is_tool_hint and content.strip():
                 progress_sent = True
                 outbound_msg = OutboundMessage(

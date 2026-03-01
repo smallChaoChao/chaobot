@@ -15,6 +15,7 @@ from chaobot.agent.memory import MemoryManager
 from chaobot.agent.tools.confirmation import ConfirmationManager, console_confirmation_callback
 from chaobot.config.manager import ConfigManager
 from chaobot.utils.progress import ProgressTracker, SimpleProgressTracker
+from chaobot.utils.prompt import create_prompt
 
 console = Console()
 
@@ -99,11 +100,8 @@ class AgentRunner:
         Args:
             message: Message to send
         """
-        if self.stream:
-            # Streaming doesn't support tools yet, fallback to non-streaming
-            asyncio.run(self._run_single_with_progress(message))
-        else:
-            asyncio.run(self._run_single_with_progress(message))
+        # Always use non-streaming mode for reliable tool support
+        asyncio.run(self._run_single_with_progress(message))
 
     async def _run_single_with_progress(self, message: str) -> None:
         """Run a single message with progress tracking.
@@ -115,7 +113,15 @@ class AgentRunner:
             """Handle progress updates."""
             if is_tool_hint and self.show_logs:
                 # Tool-related progress - show detailed format
-                if content.startswith("Executing "):
+                # Format: "  ↳ tool -> args" or "    result"
+                if content.startswith("  ↳ "):
+                    # Tool execution start
+                    console.print(f"[dim]{content}[/dim]")
+                elif content.startswith("    "):
+                    # Tool execution result (success/error/cancelled/exception)
+                    console.print(f"[dim]{content}[/dim]")
+                elif content.startswith("Executing "):
+                    # Legacy format (fallback)
                     match = content[len("Executing "):]
                     if "(" in match:
                         name = match.split("(")[0]
@@ -135,9 +141,14 @@ class AgentRunner:
                             # Show tool format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
                             console.print(f"  [dim]↳ tool[{name}] -> {args_display}[/dim]" if args_display else f"  [dim]↳ tool[{name}][/dim]")
-            elif self.show_logs:
-                # General progress
-                console.print(f"[dim]{content}[/dim]")
+            elif not is_tool_hint:
+                # LLM response content - check if it's an error
+                if content.startswith("Error:") or content.startswith("HTTP error"):
+                    # Always show errors
+                    console.print(f"[bold red]{content}[/bold red]")
+                elif self.show_logs:
+                    # General progress
+                    console.print(f"[dim]{content}[/dim]")
 
         response = await self.loop.run(
             message,
@@ -149,17 +160,22 @@ class AgentRunner:
         self._display_response(response)
 
     def run_interactive(self) -> None:
-        """Run in interactive mode."""
+        """Run in interactive mode with enhanced prompt."""
         console.print(Panel.fit(
             "🤖 chaobot interactive mode\n"
-            "Type 'exit', 'quit', or press Ctrl+D to exit",
+            "Type 'exit', 'quit', or press Ctrl+D to exit\n"
+            "Shortcuts: Ctrl+A/E (beginning/end), Ctrl+K/U (delete line), ↑/↓ (history)",
             border_style="blue"
         ))
 
+        # Create enhanced prompt with history
+        prompt = create_prompt(self.config.workspace_path)
+
         while True:
             try:
-                user_input = console.input("[bold green]You:[/bold green] ")
-                user_input = user_input.strip()
+                # Print prompt label using rich, then get input
+                console.print("[bold green]You:[/bold green] ", end="")
+                user_input = prompt.prompt(message="", multiline=False)
 
                 if not user_input:
                     continue
@@ -168,11 +184,8 @@ class AgentRunner:
                     console.print("Goodbye! 👋")
                     break
 
-                if self.stream:
-                    # For now, use non-streaming with progress tracking
-                    asyncio.run(self._run_interactive_with_progress(user_input))
-                else:
-                    asyncio.run(self._run_interactive_with_progress(user_input))
+                # Always use non-streaming mode for reliable tool support
+                asyncio.run(self._run_interactive_with_progress(user_input))
 
             except (EOFError, KeyboardInterrupt):
                 console.print("\nGoodbye! 👋")
@@ -188,7 +201,15 @@ class AgentRunner:
             """Handle progress updates."""
             if is_tool_hint and self.show_logs:
                 # Tool-related progress - show detailed format
-                if content.startswith("Executing "):
+                # Format: "  ↳ tool -> args" or "    result"
+                if content.startswith("  ↳ "):
+                    # Tool execution start
+                    console.print(f"[dim]{content}[/dim]")
+                elif content.startswith("    "):
+                    # Tool execution result (success/error/cancelled/exception)
+                    console.print(f"[dim]{content}[/dim]")
+                elif content.startswith("Executing "):
+                    # Legacy format (fallback)
                     match = content[len("Executing "):]
                     if "(" in match:
                         name = match.split("(")[0]
@@ -208,9 +229,14 @@ class AgentRunner:
                             # Show tool format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
                             console.print(f"  [dim]↳ tool[{name}] -> {args_display}[/dim]" if args_display else f"  [dim]↳ tool[{name}][/dim]")
-            elif self.show_logs:
-                # General progress
-                console.print(f"[dim]{content}[/dim]")
+            elif not is_tool_hint:
+                # LLM response content - check if it's an error
+                if content.startswith("Error:") or content.startswith("HTTP error"):
+                    # Always show errors
+                    console.print(f"[bold red]{content}[/bold red]")
+                elif self.show_logs:
+                    # General progress
+                    console.print(f"[dim]{content}[/dim]")
 
         response = await self.loop.run(
             message,
@@ -230,11 +256,14 @@ class AgentRunner:
         content = response.get("content", "")
         error = response.get("error", "")
 
-        # Display error if present
+        # Display error if present (check both error field and content starting with "Error")
         if error and self.show_logs:
             console.print(f"[bold red]Error: {error}[/bold red]")
 
-        if self.use_markdown:
+        # Check if content contains error message
+        if content.startswith("Error:") or content.startswith("HTTP error"):
+            console.print(f"[bold red]{content}[/bold red]")
+        elif self.use_markdown:
             console.print("[bold blue]chaobot:[/bold blue]")
             console.print(Markdown(content))
         else:

@@ -8,6 +8,7 @@ import httpx
 
 from chaobot.providers.base import BaseProvider
 from chaobot.providers.spec import ProviderSpec
+from chaobot.utils.rate_limiter import get_rate_limiter
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -31,6 +32,7 @@ class OpenAICompatibleProvider(BaseProvider):
         self.api_key = provider_config.api_key
         self.api_base = provider_config.api_base or spec.api_base
         self.timeout = provider_config.timeout
+        self.rate_limit_rpm = getattr(provider_config, 'rate_limit_rpm', None)
 
     async def complete(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """Complete a conversation with retry logic.
@@ -62,11 +64,26 @@ class OpenAICompatibleProvider(BaseProvider):
         }
 
         # Add tools if supported
+        # Note: Some providers (like Aliyun DashScope) may not fully support OpenAI-compatible tool format
+        # Only add tools if explicitly supported and not using custom API base
         if self.spec.supports_tools:
             tools = self._extract_tools(messages)
             if tools:
-                payload["tools"] = tools
-                payload["tool_choice"] = "auto"
+                # Check if using Aliyun DashScope (either via aliyun provider or custom api_base)
+                api_base = self.api_base or ""
+                is_aliyun = "aliyun" in api_base.lower() or "dashscope" in api_base.lower()
+                
+                if is_aliyun:
+                    # Aliyun DashScope doesn't support standard OpenAI tool format via compatible-mode API
+                    # Skip tools to avoid 400 Bad Request error
+                    pass
+                else:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+        # Apply rate limiting before making request
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.acquire(self.spec.name, self.rate_limit_rpm)
 
         # Retry logic
         max_retries = self.provider_config.max_retries
@@ -74,14 +91,15 @@ class OpenAICompatibleProvider(BaseProvider):
 
         for attempt in range(max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with httpx.AsyncClient() as client:
                     response = await client.post(
                         f"{self.api_base}/chat/completions",
                         headers={
                             "Authorization": f"Bearer {self.api_key}",
                             "Content-Type": "application/json"
                         },
-                        json=payload
+                        json=payload,
+                        timeout=self.timeout
                     )
                     response.raise_for_status()
                     data = response.json()
@@ -114,8 +132,11 @@ class OpenAICompatibleProvider(BaseProvider):
                     "tool_calls": None
                 }
             except Exception as e:
+                import traceback
+                error_msg = str(e) if str(e) else type(e).__name__
+                tb = traceback.format_exc()
                 return {
-                    "content": f"Error: {e}",
+                    "content": f"Error: {error_msg}\n\nTraceback:\n{tb}",
                     "tool_calls": None
                 }
 
@@ -155,8 +176,12 @@ class OpenAICompatibleProvider(BaseProvider):
             "stream": True
         }
 
+        # Apply rate limiting before making request
+        rate_limiter = get_rate_limiter()
+        await rate_limiter.acquire(self.spec.name, self.rate_limit_rpm)
+
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient() as client:
                 async with client.stream(
                     "POST",
                     f"{self.api_base}/chat/completions",
@@ -164,7 +189,8 @@ class OpenAICompatibleProvider(BaseProvider):
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json"
                     },
-                    json=payload
+                    json=payload,
+                    timeout=self.timeout
                 ) as response:
                     response.raise_for_status()
 
@@ -272,6 +298,7 @@ class OpenAICompatibleProvider(BaseProvider):
         content = message.get("content", "")
         tool_calls = None
 
+        # Check for standard tool_calls format
         if "tool_calls" in message:
             tool_calls = []
             for tc in message["tool_calls"]:
@@ -287,6 +314,138 @@ class OpenAICompatibleProvider(BaseProvider):
                     "name": tc.get("function", {}).get("name", ""),
                     "arguments": args
                 })
+        # Check for XML-style tool call in content (some providers like qwen)
+        elif content and "<tool_call>" in content:
+            import re
+            tool_calls = []
+
+            # Try format 1: JSON inside XML
+            pattern1 = r'<tool_call>\s*\{[^}]*"name"\s*:\s*"([^"]*)"[^}]*"arguments"\s*:\s*(\{[^}]*\})[^}]*\}\s*</tool_call>'
+            matches1 = re.findall(pattern1, content, re.DOTALL)
+            for name, args_str in matches1:
+                try:
+                    args = json.loads(args_str)
+                except json.JSONDecodeError:
+                    args = {}
+                tool_calls.append({
+                    "id": f"call_{hash(name + args_str) & 0xFFFFFFFF}",
+                    "name": name,
+                    "arguments": args
+                })
+
+            # Try format 2: <function=name> with <parameter> tags
+            # Pattern: <function=func_name><parameter=param_name>value</parameter></function>
+            pattern2 = r'<tool_call>\s*<function=(\w+)>\s*(.*?)</function>\s*</tool_call>'
+            matches2 = re.findall(pattern2, content, re.DOTALL)
+            for name, params_xml in matches2:
+                args = {}
+                # Parse parameters: <parameter=param_name>value</parameter>
+                param_pattern = r'<parameter=(\w+)>(.*?)</parameter>'
+                for param_name, param_value in re.findall(param_pattern, params_xml, re.DOTALL):
+                    args[param_name] = param_value.strip()
+
+                if args:
+                    tool_calls.append({
+                        "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
+                        "name": name,
+                        "arguments": args
+                    })
+
+            # Remove tool call XML from content
+            content = re.sub(r'<tool_call>.*?</tool_call>', '', content, flags=re.DOTALL).strip()
+
+        # Check for <tool> format (alternative XML format)
+        if not tool_calls and content and "<tool>" in content:
+            import re
+            tool_calls = []
+
+            # Pattern: <tool><name>tool_name</name><parameter=key>value</parameter></tool>
+            pattern = r'<tool>\s*<name>(\w+)</name>\s*(.*?)</tool>'
+            matches = re.findall(pattern, content, re.DOTALL)
+            for name, params_xml in matches:
+                args = {}
+                # Parse parameters: <parameter=key>value</parameter>
+                param_pattern = r'<parameter=(\w+)>(.*?)</parameter>'
+                for param_name, param_value in re.findall(param_pattern, params_xml, re.DOTALL):
+                    args[param_name] = param_value.strip()
+
+                if args:
+                    tool_calls.append({
+                        "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
+                        "name": name,
+                        "arguments": args
+                    })
+
+            # Remove tool XML from content
+            content = re.sub(r'<tool>.*?</tool>', '', content, flags=re.DOTALL).strip()
+
+        # Check for <tool_name> format (e.g., <file_read>, <shell>, etc.)
+        if not tool_calls and content:
+            import re
+            # Pattern: <tool_name>arguments</tool_name> or <tool_name arg="value"/>
+            # Try pattern: <tool_name>value</tool_name>
+            pattern1 = r'<(\w+)>([^<]+)</\1>'
+            matches1 = re.findall(pattern1, content, re.DOTALL)
+            for name, arg_value in matches1:
+                # Check if this looks like a tool name (file_read, shell, web_search, etc.)
+                if name in ['file_read', 'file_write', 'file_edit', 'shell', 'web_search', 'web_fetch', 'browser_screenshot']:
+                    if not tool_calls:
+                        tool_calls = []
+                    # Single argument tools
+                    if name == 'file_read':
+                        tool_calls.append({
+                            "id": f"call_{hash(name + arg_value) & 0xFFFFFFFF}",
+                            "name": name,
+                            "arguments": {"path": arg_value.strip()}
+                        })
+                    elif name == 'shell':
+                        tool_calls.append({
+                            "id": f"call_{hash(name + arg_value) & 0xFFFFFFFF}",
+                            "name": name,
+                            "arguments": {"command": arg_value.strip()}
+                        })
+                    elif name in ['web_search', 'web_fetch']:
+                        tool_calls.append({
+                            "id": f"call_{hash(name + arg_value) & 0xFFFFFFFF}",
+                            "name": name,
+                            "arguments": {"query" if name == 'web_search' else "url": arg_value.strip()}
+                        })
+
+            if tool_calls:
+                # Remove tool XML from content
+                for name, _ in matches1:
+                    if name in ['file_read', 'file_write', 'file_edit', 'shell', 'web_search', 'web_fetch', 'browser_screenshot']:
+                        content = re.sub(rf'<{name}>.*?</{name}>', '', content, flags=re.DOTALL).strip()
+
+        # Check for nested format: <tool_name><command>value</command></tool_name>
+        if not tool_calls and content:
+            import re
+            # Pattern: <shell><command>value</command></shell>
+            pattern2 = r'<(shell|file_read|web_search|web_fetch)>\s*<(command|path|query|url)>(.*?)</\2>\s*</\1>'
+            matches2 = re.findall(pattern2, content, re.DOTALL)
+            for tool_name, arg_name, arg_value in matches2:
+                if not tool_calls:
+                    tool_calls = []
+                
+                # Map argument names
+                arg_key_map = {
+                    'command': 'command',
+                    'path': 'path',
+                    'query': 'query',
+                    'url': 'url'
+                }
+                arg_key = arg_key_map.get(arg_name, arg_name)
+                
+                tool_calls.append({
+                    "id": f"call_{hash(tool_name + arg_value) & 0xFFFFFFFF}",
+                    "name": tool_name,
+                    "arguments": {arg_key: arg_value.strip()}
+                })
+            
+            if tool_calls:
+                # Remove nested tool XML from content
+                for tool_name, arg_name, _ in matches2:
+                    content = re.sub(rf'<{tool_name}>\s*<{arg_name}>.*?</{arg_name}>\s*</{tool_name}>', '', content, flags=re.DOTALL).strip()
 
         return {
             "content": content or "",

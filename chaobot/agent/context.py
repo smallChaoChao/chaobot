@@ -21,6 +21,14 @@ Guidelines:
 - Before modifying a file, read it first. Do not assume files or directories exist
 - After writing or editing a file, re-read if accuracy matters
 - If a tool call fails, analyze the error before retrying with a different approach
+
+CRITICAL - Tool Execution Awareness:
+- ALWAYS check the tool execution results in the conversation history before making new tool calls
+- Tool results are prefixed with [STATUS: SUCCESS], [STATUS: ERROR], [STATUS: CANCELLED], or [STATUS: EXCEPTION]
+- If a tool returned [STATUS: SUCCESS], DO NOT call the same tool with the same arguments again
+- If you see a command succeeded (e.g., "mkdir -p ..." returned successfully), do not execute it again
+- Use the information from successful tool results to inform your next steps
+- Track what has been done vs what still needs to be done
 """
 
 SKILLS_INSTRUCTION = """

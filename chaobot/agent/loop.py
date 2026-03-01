@@ -1,6 +1,5 @@
 """Main agent loop for LLM interaction."""
 
-import asyncio
 from typing import Any, AsyncIterator, Callable, Awaitable
 
 from chaobot.agent.context import ContextBuilder
@@ -177,6 +176,9 @@ class AgentLoop:
                         "tool_call_id": result["tool_call_id"],
                         "content": result["content"]
                     })
+
+                # Continue to next iteration to get LLM's response with tool results
+                continue
             else:
                 # Final response
                 content = response.get("content", "")
@@ -293,7 +295,7 @@ class AgentLoop:
             if on_progress:
                 # Format full arguments for display (no truncation)
                 args_str = self._format_arguments_full(arguments)
-                await on_progress(f"Executing {name}({args_str})", True)
+                await on_progress(f"  ↳ tool -> {args_str}", True)
 
             try:
                 # Check for user confirmation for sensitive operations
@@ -301,39 +303,80 @@ class AgentLoop:
                 confirmation = await confirmation_manager.confirm(name, arguments)
 
                 if not confirmation.approved:
+                    result_content = f"[STATUS: CANCELLED] Operation cancelled: {confirmation.message}"
                     results.append({
                         "tool_call_id": tool_call_id,
-                        "content": f"Operation cancelled: {confirmation.message}"
+                        "content": result_content
                     })
                     if on_progress:
-                        await on_progress(f"✗ {name} cancelled: {confirmation.message}", True)
+                        await on_progress(f"    ✗ Cancelled: {confirmation.message}", True)
                     continue
 
                 result = await self.tools.execute(name, arguments)
+                # Extract content from ToolResult
+                result_str = result.content if result else "(empty result)"
+
+                # Format result with status prefix for better LLM understanding
+                if not result or not result.success:
+                    result_content = f"[STATUS: ERROR] {result_str}"
+                else:
+                    result_content = f"[STATUS: SUCCESS] {result_str}"
+
                 results.append({
                     "tool_call_id": tool_call_id,
-                    "content": str(result)
+                    "content": result_content
                 })
 
-                # Notify progress - tool execution complete
+                # Notify progress - tool execution complete with full result
                 if on_progress:
-                    result_preview = str(result)[:100] if result else "Done"
-                    if len(str(result)) > 100:
-                        result_preview += "..."
-                    await on_progress(f"✓ {name} completed: {result_preview}", True)
+                    # Format the result for display
+                    formatted_result = self._format_tool_result(name, result_content)
+                    await on_progress(f"    {formatted_result}", True)
 
             except Exception as e:
                 error_msg = str(e)
+                result_content = f"[STATUS: EXCEPTION] Error: {error_msg}"
                 results.append({
                     "tool_call_id": tool_call_id,
-                    "content": f"Error: {error_msg}"
+                    "content": result_content
                 })
 
                 # Notify progress - tool execution failed
                 if on_progress:
-                    await on_progress(f"✗ {name} failed: {error_msg}", True)
+                    await on_progress(f"    ✗ Exception: {error_msg}", True)
 
         return results
+
+    @staticmethod
+    def _format_tool_result(tool_name: str, result: str) -> str:
+        """Format tool result for CLI display.
+
+        Args:
+            tool_name: Name of the tool
+            result: Raw result string
+
+        Returns:
+            Formatted result string with proper indentation
+        """
+        if not result:
+            return "    (empty result)"
+
+        # Split result into lines and indent each line
+        lines = result.split('\n')
+
+        # For single line results, just indent
+        if len(lines) == 1:
+            return f"    {result}"
+
+        # For multi-line results, format with proper indentation
+        formatted_lines = []
+        for line in lines:
+            if line.strip():  # Only indent non-empty lines
+                formatted_lines.append(f"    {line}")
+            else:
+                formatted_lines.append("")  # Keep empty lines as is
+
+        return '\n'.join(formatted_lines)
 
     @staticmethod
     def _format_tool_hint(tool_calls: list[dict[str, Any]]) -> str:
