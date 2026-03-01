@@ -3,6 +3,7 @@
 from typing import Any
 
 from chaobot.config.schema import Config
+from chaobot.skills import get_skills_loader
 
 
 DEFAULT_SYSTEM_PROMPT = """You are chaobot, a helpful AI assistant.
@@ -14,6 +15,7 @@ Guidelines:
 - Ask clarifying questions if needed
 - Use tools to gather information or perform actions
 - Always prioritize user safety and privacy
+- When you need to perform a task, check if there's a relevant skill available
 """
 
 
@@ -27,6 +29,7 @@ class ContextBuilder:
             config: Application configuration
         """
         self.config = config
+        self.skills = get_skills_loader()
 
     def build(
         self,
