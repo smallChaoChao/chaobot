@@ -259,14 +259,20 @@ class OpenAICompatibleProvider(BaseProvider):
         tool_calls = None
 
         if "tool_calls" in message:
-            tool_calls = [
-                {
+            tool_calls = []
+            for tc in message["tool_calls"]:
+                args = tc.get("function", {}).get("arguments", "{}")
+                # Parse arguments if it's a string (JSON)
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+                tool_calls.append({
                     "id": tc.get("id", ""),
                     "name": tc.get("function", {}).get("name", ""),
-                    "arguments": tc.get("function", {}).get("arguments", {})
-                }
-                for tc in message["tool_calls"]
-            ]
+                    "arguments": args
+                })
 
         return {
             "content": content or "",
