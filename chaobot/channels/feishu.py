@@ -4,6 +4,7 @@ import asyncio
 import json
 import threading
 import time
+import uuid
 from typing import Any
 
 from rich.console import Console
@@ -20,6 +21,7 @@ except ImportError:
     FEISHU_AVAILABLE = False
 
 from chaobot.channels.base import BaseChannel
+from chaobot.core.bus import InboundMessage, OutboundMessage, get_bus
 
 console = Console()
 
@@ -65,6 +67,11 @@ class FeishuChannel(BaseChannel):
         console.print(f"[blue]📝 Feishu App ID: {self.app_id[:10]}...[/blue]")
         self._running = True
         self._loop = asyncio.get_event_loop()
+
+        # Register outbound handler with message bus
+        bus = get_bus()
+        bus.on_outbound(self._handle_outbound)
+        console.print("[dim]📤 Registered with message bus[/dim]")
 
         # Create Lark client for sending messages
         try:
@@ -117,16 +124,24 @@ class FeishuChannel(BaseChannel):
         self._running = False
         console.print("[yellow]🛑 Stopping Feishu channel...[/yellow]")
 
-        if self._ws_client:
-            try:
-                self._ws_client.stop()
-            except Exception as e:
-                console.print(f"[yellow]⚠️  Error stopping WebSocket: {e}[/yellow]")
+        # Note: lark-oapi WebSocket client doesn't have a stop method
+        # It will stop when _running is False and the thread exits
 
         if self._ws_thread and self._ws_thread.is_alive():
             self._ws_thread.join(timeout=5)
 
         console.print("[green]✅ Feishu channel stopped[/green]")
+
+    async def _handle_outbound(self, message: OutboundMessage) -> None:
+        """Handle outbound messages from the bus.
+
+        Args:
+            message: Outbound message to send
+        """
+        if message.channel != self.name:
+            return
+
+        await self.send_message(message.recipient_id, message.content)
 
     async def send_message(self, to: str, message: str) -> None:
         """Send a message to Feishu.
@@ -194,7 +209,6 @@ class FeishuChannel(BaseChannel):
             message = event.message
             sender = event.sender
 
-            console.print(f"[dim]📨 Event type: {event.type}[/dim]")
             console.print(f"[dim]📨 Message type: {message.message_type}[/dim]")
 
             # Skip bot messages
@@ -228,12 +242,18 @@ class FeishuChannel(BaseChannel):
             chat_id = message.chat_id
             console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
 
-            # TODO: Integrate with Agent for processing
-            # For now, echo back
-            response = f"Echo: {text}"
-            console.print(f"[blue]📤 Sending response: {response[:50]}...[/blue]")
-            await self.send_message(chat_id, response)
-            console.print("[green]✅ Response sent[/green]")
+            # Create inbound message and publish to bus
+            inbound_msg = InboundMessage(
+                id=str(uuid.uuid4()),
+                channel=self.name,
+                sender_id=sender_id,
+                chat_id=chat_id,
+                content=text,
+                raw_data=data
+            )
+
+            bus = get_bus()
+            await bus.publish_inbound(inbound_msg)
 
         except Exception as e:
             console.print(f"[red]❌ Error processing message: {e}[/red]")
