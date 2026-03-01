@@ -150,13 +150,9 @@ class GatewayServer:
         """Shutdown all components gracefully."""
         console.print("🛑 Shutting down server...")
 
-        # Cancel agent task
+        # Cancel agent task (don't wait for it)
         if self._agent_task:
             self._agent_task.cancel()
-            try:
-                await self._agent_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop channel manager
         await self.channel_manager.stop_all()

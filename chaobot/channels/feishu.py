@@ -121,9 +121,7 @@ class FeishuChannel(BaseChannel):
 
         # Note: lark-oapi WebSocket client doesn't have a stop method
         # It will stop when _running is False and the thread exits
-
-        if self._ws_thread and self._ws_thread.is_alive():
-            self._ws_thread.join(timeout=5)
+        # Don't wait for thread - it will exit on its own when _running is False
 
         console.print("[green]✅ Feishu channel stopped[/green]")
 
@@ -239,7 +237,7 @@ class FeishuChannel(BaseChannel):
             )
 
             bus = get_bus()
-            await bus.publish_inbound(inbound_msg)
+            await bus.inbound.put(inbound_msg)
 
         except Exception as e:
             console.print(f"[red]❌ Error processing message: {e}[/red]")
