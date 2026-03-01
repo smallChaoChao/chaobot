@@ -9,14 +9,15 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from platformdirs import user_data_dir
-
 from rich.console import Console
 
 console = Console()
 
 # Built-in skills directory
 BUILTIN_SKILLS_DIR = Path(__file__).parent
+
+# Default workspace directory
+DEFAULT_WORKSPACE = Path.home() / ".chaobot" / "workspace"
 
 
 class SkillsLoader:
@@ -38,7 +39,7 @@ class SkillsLoader:
             workspace: Workspace directory for user skills
         """
         if workspace is None:
-            workspace = Path(user_data_dir("chaobot", "chaobot")) / "workspace"
+            workspace = DEFAULT_WORKSPACE
 
         self.workspace = workspace
         self.workspace_skills = workspace / "skills"
