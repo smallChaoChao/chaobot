@@ -1,0 +1,222 @@
+# Video Generator Configuration
+# 视频生成器配置文件
+
+# 默认语音设置
+voice:
+  # 默认语音 (可选: xiaoxiao, xiaoyi, yunxi, yunyang, yunjian)
+  default: "xiaoxiao"
+  
+  # 语音映射表
+  options:
+    xiaoxiao:
+      id: "zh-CN-XiaoxiaoNeural"
+      name: "晓晓"
+      gender: "female"
+      style: "温柔、自然"
+      speed: 1.0
+    xiaoyi:
+      id: "zh-CN-XiaoyiNeural"
+      name: "晓伊"
+      gender: "female"
+      style: "活泼、可爱"
+      speed: 1.1
+    yunxi:
+      id: "zh-CN-YunxiNeural"
+      name: "云希"
+      gender: "male"
+      style: "年轻、阳光"
+      speed: 1.0
+    yunyang:
+      id: "zh-CN-YunyangNeural"
+      name: "云扬"
+      gender: "male"
+      style: "新闻播报"
+      speed: 0.95
+    yunjian:
+      id: "zh-CN-YunjianNeural"
+      name: "云健"
+      gender: "male"
+      style: "沉稳、专业"
+      speed: 0.9
+
+# 写作风格配置
+writing_styles:
+  # 默认风格
+  default: "natural"
+  
+  # 可用风格列表
+  options:
+    natural:
+      name: "自然口语"
+      description: "像朋友聊天一样，轻松自然"
+      tone: "casual"
+      template: |
+        嘿，今天想跟你聊聊{topic}。
+        
+        {content}
+        
+        怎么样，是不是挺有意思的？咱们下次再聊！
+      avoid_phrases:
+        - "首先"
+        - "其次"
+        - "最后"
+        - "综上所述"
+        - "总而言之"
+        - "值得注意的是"
+        - "不可否认"
+        - "显而易见"
+        - "毋庸置疑"
+    
+    storytelling:
+      name: "故事叙述"
+      description: "用讲故事的方式娓娓道来"
+      tone: "narrative"
+      template: |
+        说起来，有个事儿特别有意思...
+        
+        {content}
+        
+        这事儿告诉我们...
+      avoid_phrases:
+        - "第一点"
+        - "第二点"
+        - "此外"
+        - "另外"
+        - "不仅如此"
+    
+    news:
+      name: "新闻播报"
+      description: "专业、简洁的新闻风格"
+      tone: "formal"
+      template: |
+        【{topic}】
+        
+        {content}
+        
+        以上是本次报道的主要内容。
+      avoid_phrases:
+        - "我觉得"
+        - "我认为"
+        - "可能"
+        - "大概"
+        - "应该"
+    
+    humorous:
+      name: "幽默风趣"
+      description: "轻松搞笑，带点段子"
+      tone: "funny"
+      template: |
+        哈哈，今天要说的这个事儿，可把我乐坏了！
+        
+        {content}
+        
+        怎么样，是不是很逗？别急，还有更有意思的呢！
+      avoid_phrases:
+        - "首先"
+        - "其次"
+        - "综上所述"
+        - "总而言之"
+    
+    professional:
+      name: "专业解读"
+      description: "深度分析，专业视角"
+      tone: "professional"
+      template: |
+        关于{topic}，我们来深入分析一下。
+        
+        {content}
+        
+        这就是我对这个问题的看法，欢迎讨论。
+      avoid_phrases:
+        - "哈哈"
+        - "嘿嘿"
+        - "有点意思"
+        - "挺逗的"
+
+# 背景设置
+background:
+  # 默认背景模式: screenshot, generated, custom
+  mode: "screenshot"
+  
+  # 截图设置
+  screenshot:
+    full_page: false
+    viewport_width: 1920
+    viewport_height: 1080
+    # 等待页面加载的时间(秒)
+    wait_time: 2
+  
+  # AI生成背景设置(需要 DALL-E 或其他图片生成 API)
+  generated:
+    style: "modern minimalist"
+    resolution: "1920x1080"
+  
+  # 自定义背景目录
+  custom_dir: "~/.chaobot/workspace/backgrounds"
+  
+  # 默认背景颜色(当没有背景图时)
+  default_color: "#1a1a2e"
+
+# 视频设置
+video:
+  # 输出目录
+  output_dir: "~/.chaobot/workspace/videos"
+  
+  # 视频参数
+  resolution: "1920x1080"
+  fps: 30
+  
+  # 字幕设置
+  subtitle:
+    font: "PingFang SC"
+    font_size: 48
+    color: "white"
+    outline_color: "black"
+    outline_width: 2
+    position: "bottom"
+    margin: 50
+  
+  # 音频设置
+  audio:
+    bitrate: "192k"
+    sample_rate: 44100
+  
+  # 视频质量
+  quality:
+    crf: 23  # 18-28, 越小质量越高
+    preset: "medium"  # ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+
+# 内容处理设置
+content:
+  # 稿件长度(字数)
+  min_length: 200
+  max_length: 800
+  ideal_length: 400
+  
+  # 段落设置
+  paragraph_min_sentences: 2
+  paragraph_max_sentences: 5
+  
+  # 内容提取
+  extract:
+    # 要提取的内容选择器
+    selectors:
+      - "article"
+      - ".content"
+      - ".post-content"
+      - ".article-body"
+      - "main"
+    # 要排除的元素
+    exclude:
+      - "nav"
+      - "footer"
+      - ".comments"
+      - ".advertisement"
+      - ".related-posts"
+
+# 输出文件命名
+naming:
+  # 支持变量: {date}, {time}, {title}, {index}
+  pattern: "{date}_{index}"
+  date_format: "%Y-%m-%d"
+  time_format: "%H%M%S"

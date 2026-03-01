@@ -1,251 +1,200 @@
 ---
 name: video-generator
-description: "Generate videos from web content. Fetch content from URLs, convert to script, generate TTS audio, and create video with subtitles."
+description: "Generate videos from web URLs. Use this skill when user wants to: create video from webpage, convert article to video, make video from URL, generate video with narration. Steps: 1) Fetch web content, 2) Summarize and humanize text, 3) Capture screenshot or generate background image, 4) Generate TTS audio with SRT subtitles, 5) Compose final video. Supports configurable writing styles, multiple voices, and custom backgrounds."
 homepage: https://github.com/smallChaoChao/chaobot
-metadata: {"chaobot":{"emoji":"🎬","requires":{"bins":["ffmpeg","edge-tts"]}}}
+metadata:
+  chaobot:
+    emoji: "🎬"
+    requires:
+      bins: ["ffmpeg", "edge-tts"]
 ---
 
 # Video Generator Skill
 
-Generate professional videos from web content automatically. This skill can:
-1. Fetch content from specified URLs
-2. Convert content to video script using LLM
-3. Generate TTS audio (Text-to-Speech)
-4. Create video with subtitles and background
+从网页 URL 自动生成带字幕的解说视频。
 
-## ⚠️ Prerequisites
+## 工作流程
 
-Before using this skill, ensure the following tools are installed:
+当用户请求生成视频时，按以下步骤执行：
 
-### 1. FFmpeg
+### Step 1: 获取网页内容
+
+```
+使用 browser_navigate 导航到 URL
+使用 browser_screenshot 截取网页截图（作为背景）
+使用 browser_get_html 或 web_fetch 获取内容
+```
+
+**截图设置：**
+- 使用 `full_page: false` 获取可视区域截图
+- 截图保存为背景图片
+
+### Step 2: 总结内容并生成稿件
+
+**关键：去 AI 味写作**
+
+使用 LLM 将内容总结为自然口语风格的稿件：
+
+```
+你是一位视频内容创作者，擅长用自然、口语化的方式讲述内容。
+
+要求：
+1. 像和朋友聊天一样，轻松自然
+2. 避免使用"首先、其次、最后、综上所述"等 AI 味词汇
+3. 用故事化的方式串联内容
+4. 保持 200-400 字的精炼长度
+5. 开头要吸引人，结尾要有互动感
+
+避免的词汇：
+- 首先、其次、再次、最后
+- 综上所述、总而言之
+- 值得注意的是、不可否认
+- 显而易见、毋庸置疑
+- 此外、另外、不仅如此
+
+推荐的表达：
+- "说起来有个事儿..."
+- "你猜怎么着..."
+- "有意思的是..."
+- "这事儿告诉我们..."
+```
+
+### Step 3: 生成背景图片
+
+**方式一：网页截图（推荐）**
+```
+browser_screenshot → 保存为 background.png
+```
+
+**方式二：纯色背景**
+```
+ffmpeg -f lavfi -i color=c=#1a1a2e:s=1920x1080:d=60 -frames:v 1 background.png
+```
+
+**方式三：自定义背景**
+```
+使用 ~/.chaobot/workspace/backgrounds/ 目录下的图片
+```
+
+### Step 4: TTS 生成音频和字幕
+
 ```bash
-# macOS
-brew install ffmpeg
+# 生成音频和字幕
+edge-tts --text "你的稿件内容" \
+         --voice zh-CN-XiaoxiaoNeural \
+         --write-media audio.mp3 \
+         --write-subtitles subtitles.vtt
 
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# Windows (using winget)
-winget install ffmpeg
+# 转换 VTT 为 SRT 格式
+ffmpeg -i subtitles.vtt subtitles.srt
 ```
 
-### 2. Edge-TTS (Microsoft Edge TTS)
+**可用语音：**
+
+| ID | 名称 | 性别 | 风格 | 适用场景 |
+|----|------|------|------|---------|
+| xiaoxiao | 晓晓 | 女 | 温柔自然 | 教程、解说 |
+| xiaoyi | 晓伊 | 女 | 活泼可爱 | 轻松内容 |
+| yunxi | 云希 | 男 | 年轻阳光 | 科技、潮流 |
+| yunyang | 云扬 | 男 | 新闻播报 | 新闻、正式 |
+| yunjian | 云健 | 男 | 沉稳专业 | 商务、知识 |
+
+### Step 5: 合成最终视频
+
 ```bash
-pip install edge-tts
+# 合成视频（背景图 + 音频）
+ffmpeg -loop 1 -i background.png -i audio.mp3 \
+       -c:v libx264 -tune stillimage -c:a aac -b:a 192k \
+       -pix_fmt yuv420p -shortest video_no_sub.mp4
+
+# 添加字幕
+ffmpeg -i video_no_sub.mp4 \
+       -vf "subtitles=subtitles.srt:force_style='FontName=PingFang SC,FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=2,MarginV=50'" \
+       -c:a copy output.mp4
 ```
 
-### 3. Optional: Background Videos/Images
-Prepare some background videos or images in `~/.chaobot/workspace/backgrounds/`
+## 配置文件
 
-## Usage
+配置文件位于: `skills/video-generator/config.yaml`
 
-### Basic Video Generation
+可配置项：
+- **voice**: 默认语音、语速
+- **writing_styles**: 写作风格模板
+- **background**: 背景模式、截图设置
+- **video**: 分辨率、字幕样式、视频质量
+- **content**: 稿件长度、段落设置
+
+## 使用示例
+
+### 示例 1: 基础用法
+```
+用户: 帮我把这个网页生成视频：https://example.com/article
+
+执行流程:
+1. browser_navigate → https://example.com/article
+2. browser_screenshot → background.png
+3. web_fetch → 获取内容
+4. LLM → 生成自然口语稿件
+5. edge-tts → audio.mp3 + subtitles.srt
+6. ffmpeg → output.mp4
+```
+
+### 示例 2: 指定风格和语音
+```
+用户: 用新闻风格生成视频，语音用云扬：https://news.com/story
+
+配置:
+- writing_style: news
+- voice: yunyang
+```
+
+### 示例 3: 自定义背景
+```
+用户: 用这张图片做背景生成视频：/path/to/image.jpg，内容来自 https://...
+
+步骤:
+1. 跳过截图步骤
+2. 使用指定图片作为背景
+3. 继续后续流程
+```
+
+## 输出位置
+
+生成的文件保存在 `~/.chaobot/workspace/videos/`:
+```
+videos/
+├── 2024-01-15_001.mp4      # 最终视频
+├── 2024-01-15_001.srt      # 字幕文件
+├── 2024-01-15_001.mp3      # 音频文件
+└── backgrounds/
+    └── 2024-01-15_001.png  # 背景图片
+```
+
+## 环境要求
 
 ```bash
-# Generate video from URL
-chaobot run -m "生成视频：https://example.com/article"
-
-# Generate video with custom style
-chaobot run -m "用解说风格生成视频：https://news.site.com/story"
-```
-
-### Workflow
-
-When user requests video generation, follow these steps:
-
-#### Step 1: Fetch Web Content
-```
-Use web_fetch tool to get the content from the URL
-Extract main text content
-```
-
-#### Step 2: Generate Script
-```
-Use LLM to convert content into video script:
-- Keep it concise (300-500 words for 1-2 minute video)
-- Use conversational tone
-- Add natural pauses
-- Structure into clear sections
-```
-
-#### Step 3: Generate TTS Audio
-```bash
-# Use edge-tts to generate audio
-edge-tts --text "你的文稿内容" --write-media output.mp3
-
-# With specific voice
-edge-tts --text "你的文稿内容" --voice zh-CN-XiaoxiaoNeural --write-media output.mp3
-
-# Available Chinese voices:
-# zh-CN-XiaoxiaoNeural - 晓晓 (女声，温柔)
-# zh-CN-YunxiNeural - 云希 (男声，年轻)
-# zh-CN-YunyangNeural - 云扬 (男声，新闻播报)
-# zh-CN-XiaoyiNeural - 晓伊 (女声，活泼)
-```
-
-#### Step 4: Create Subtitles
-```bash
-# Generate SRT subtitles (use whisper or manual timing)
-# Or use edge-tts to get word boundaries
-edge-tts --text "你的文稿内容" --write-media output.mp3 --write-subtitles output.vtt
-```
-
-#### Step 5: Compose Video
-```bash
-# Create video with background image and audio
-ffmpeg -loop 1 -i background.jpg -i audio.mp3 -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest output.mp4
-
-# Add subtitles
-ffmpeg -i output.mp4 -vf "subtitles=subtitle.srt" final.mp4
-
-# With background video
-ffmpeg -i background.mp4 -i audio.mp3 -c:v libx264 -c:a aac -shortest output.mp4
-```
-
-## Script Template
-
-Use this template for generating video scripts:
-
-```markdown
-## 视频标题
-
-[开场白 - 吸引注意力]
-大家好，今天我们来聊聊...
-
-[核心内容 - 分3-5个要点]
-首先，...
-其次，...
-最后，...
-
-[总结与结尾]
-总结一下，...
-感谢观看，我们下期再见！
-```
-
-## Available Voices
-
-### Chinese (Mandarin)
-| Voice ID | Name | Gender | Style |
-|----------|------|--------|-------|
-| zh-CN-XiaoxiaoNeural | 晓晓 | Female | 温柔、自然 |
-| zh-CN-XiaoyiNeural | 晓伊 | Female | 活泼、可爱 |
-| zh-CN-YunxiNeural | 云希 | Male | 年轻、阳光 |
-| zh-CN-YunyangNeural | 云扬 | Male | 新闻播报 |
-| zh-CN-YunjianNeural | 云健 | Male | 沉稳、专业 |
-
-### English
-| Voice ID | Name | Gender | Style |
-|----------|------|--------|-------|
-| en-US-JennyNeural | Jenny | Female | 自然、友好 |
-| en-US-GuyNeural | Guy | Male | 专业、稳重 |
-| en-GB-SoniaNeural | Sonia | Female | 英式、优雅 |
-
-## Examples
-
-### Example 1: News Video
-```
-User: "把这篇新闻生成视频：https://news.example.com/article"
-
-Steps:
-1. web_fetch: 获取新闻内容
-2. LLM: 生成新闻播报稿件（300字左右）
-3. edge-tts: 使用 zh-CN-YunyangNeural 生成音频
-4. ffmpeg: 合成视频（背景+字幕）
-5. 输出: news_video.mp4
-```
-
-### Example 2: Tutorial Video
-```
-User: "生成教程视频：https://docs.example.com/tutorial"
-
-Steps:
-1. web_fetch: 获取教程内容
-2. LLM: 生成分步骤解说稿件
-3. edge-tts: 使用 zh-CN-XiaoxiaoNeural 生成音频
-4. ffmpeg: 合成视频
-5. 输出: tutorial_video.mp4
-```
-
-### Example 3: Custom Style
-```
-User: "用幽默风格生成视频：https://blog.example.com/funny-story"
-
-Steps:
-1. web_fetch: 获取内容
-2. LLM: 用幽默风格改写稿件
-3. edge-tts: 使用 zh-CN-XiaoyiNeural（活泼女声）
-4. ffmpeg: 合成视频
-5. 输出: funny_video.mp4
-```
-
-## Advanced Features
-
-### 1. Background Management
-```bash
-# List available backgrounds
-ls ~/.chaobot/workspace/backgrounds/
-
-# Use specific background
-chaobot run -m "用科技感背景生成视频：https://..."
-```
-
-### 2. Batch Processing
-```bash
-# Generate multiple videos
-for url in url1 url2 url3; do
-  chaobot run -m "生成视频：$url"
-done
-```
-
-### 3. Custom Duration
-```
-User: "生成30秒短视频：https://..."
-User: "生成5分钟长视频：https://..."
-```
-
-## Output Location
-
-Generated videos are saved to:
-```
-~/.chaobot/workspace/videos/
-├── 2024-01-15_001.mp4
-├── 2024-01-15_002.mp4
-└── ...
-```
-
-## Troubleshooting
-
-### FFmpeg not found
-```bash
-# Check installation
+# 检查安装
 ffmpeg -version
+edge-tts --version
 
-# Add to PATH if needed
-export PATH=$PATH:/usr/local/bin
+# 安装命令
+brew install ffmpeg          # macOS
+pip install edge-tts         # Python TTS
 ```
 
-### TTS fails
-```bash
-# Check edge-tts installation
-pip show edge-tts
+## 故障排除
 
-# Test basic usage
-edge-tts --text "测试" --write-media test.mp3
-```
+| 问题 | 解决方案 |
+|------|---------|
+| ffmpeg not found | `brew install ffmpeg` |
+| edge-tts 失败 | `pip install edge-tts --upgrade` |
+| 字幕不显示 | 检查 SRT 编码为 UTF-8 |
+| 视频质量差 | 调整 CRF 值（18-28，越小越好）|
 
-### Video quality issues
-```bash
-# Higher quality
-ffmpeg -i bg.jpg -i audio.mp3 -c:v libx264 -crf 18 -c:a aac -b:a 256k output.mp4
+## 质量提示
 
-# Lower quality (smaller file)
-ffmpeg -i bg.jpg -i audio.mp3 -c:v libx264 -crf 28 -c:a aac -b:a 128k output.mp4
-```
-
-## Tips
-
-1. **Script Length**: 150-200 words ≈ 1 minute video
-2. **Voice Selection**: Match voice to content style
-3. **Background**: Use high-quality images (1920x1080)
-4. **Subtitles**: Improve accessibility and engagement
-5. **Testing**: Always preview before final export
+1. **稿件长度**: 200-400 字 ≈ 1-2 分钟视频
+2. **语音选择**: 根据内容风格匹配语音
+3. **背景图片**: 使用 1920x1080 高清图片
+4. **字幕样式**: 白字黑边，底部居中
+5. **预览测试**: 先生成短视频测试效果

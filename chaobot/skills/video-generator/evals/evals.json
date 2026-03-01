@@ -1,0 +1,40 @@
+{
+  "skill_name": "video-generator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "basic_video_generation",
+      "prompt": "帮我把这个网页生成视频：https://www.anthropic.com/news/claude-3-5-sonnet",
+      "expected_output": "生成包含以下步骤的完整视频：1) 获取网页内容 2) 截图作为背景 3) 生成自然口语稿件 4) TTS生成音频和字幕 5) 合成最终视频",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "custom_style_and_voice",
+      "prompt": "用新闻风格生成视频，语音用云扬：https://news.sina.com.cn/article/example",
+      "expected_output": "使用新闻风格模板生成稿件，使用 yunyang (云扬) 语音，生成专业的新闻播报风格视频",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "humorous_style_video",
+      "prompt": "用幽默风格把这篇博客生成视频：https://blog.example.com/funny-story",
+      "expected_output": "使用幽默风格模板，生成轻松搞笑的稿件，使用活泼的语音（如 xiaoyi），生成有趣的视频",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "with_custom_background",
+      "prompt": "用这张图片做背景生成视频：/Users/test/background.jpg，内容来自 https://example.com/tech-article",
+      "expected_output": "跳过截图步骤，使用指定的背景图片，从网页获取内容后生成视频",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "check_dependencies",
+      "prompt": "检查视频生成的环境是否配置正确",
+      "expected_output": "检查 ffmpeg、edge-tts 等依赖是否安装，给出安装建议",
+      "files": []
+    }
+  ]
+}
