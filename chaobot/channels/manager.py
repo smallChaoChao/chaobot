@@ -76,13 +76,9 @@ class ChannelManager:
         """Stop all channels and the dispatch loop."""
         self._running = False
         
-        # Cancel dispatch task
+        # Cancel dispatch task (don't wait)
         if self._dispatch_task:
             self._dispatch_task.cancel()
-            try:
-                await self._dispatch_task
-            except asyncio.CancelledError:
-                pass
                 
         # Stop all channels
         for name, channel in self.channels.items():
