@@ -1,41 +1,51 @@
-"""Gateway server managing all channels.
-
-This follows nanobot's design with:
-- MessageBus for decoupled communication
-- ChannelManager for centralized channel management
-- AgentLoop for message processing
-"""
+"""Gateway server for handling chat channels and agent processing."""
 
 import asyncio
 import signal
 from typing import Any
 
 from rich.console import Console
-from rich.panel import Panel
 
-from chaobot.agent.loop import AgentLoop
 from chaobot.channels.manager import ChannelManager
 from chaobot.config.manager import ConfigManager
 from chaobot.bus import get_bus, InboundMessage, OutboundMessage
+from chaobot.agent.runner import AgentRunner
 
 console = Console()
+
+
+# ASCII art banner for ChaoBot - Large and clear
+CHAOBOT_BANNER = r"""
+    ____   _                       ____            _
+   / ___| | |__     __ _    ___   | __ )    ___   | |_
+  | |     | '_ \   / _` |  / _ \  |  _ \   / _ \  | __|
+  | |___  | | | | | (_| | | (_) | | |_) | | (_) | | |_
+   \____| |_| |_|  \__,_|  \___/  |____/   \___/   \__|
+
+           🤖  Your Personal AI Assistant
+"""
 
 
 class GatewayServer:
     """Server managing all chat channels and agent processing."""
 
-    def __init__(self) -> None:
-        """Initialize gateway server."""
+    def __init__(self, show_logs: bool = True) -> None:
+        """Initialize gateway server.
+
+        Args:
+            show_logs: Whether to show tool execution logs
+        """
         self.config = ConfigManager().load()
         self.channel_manager = ChannelManager(self.config)
-        self.agent_loop: AgentLoop | None = None
+        self.show_logs = show_logs
         self.running = False
         self._stop_event = asyncio.Event()
         self._agent_task: asyncio.Task | None = None
 
     def start(self) -> None:
         """Start the gateway server."""
-        console.print("🚀 Starting chaobot server...")
+        # Print ASCII banner
+        console.print(f"[cyan]{CHAOBOT_BANNER}[/cyan]")
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -55,9 +65,6 @@ class GatewayServer:
         bus = get_bus()
         await bus.start()
 
-        # Initialize agent loop
-        self.agent_loop = AgentLoop(self.config)
-
         # Start channel manager (initializes and starts all channels)
         await self.channel_manager.start_all()
 
@@ -68,15 +75,10 @@ class GatewayServer:
         # Start agent processing loop
         self._agent_task = asyncio.create_task(self._agent_processing_loop())
 
-        console.print(Panel.fit(
-            "✅ Server is running\n\n"
-            "Active channels:\n" +
-            "\n".join([f"  • {name}" for name in self.channel_manager.channels.keys()]) +
-            "\n  • Agent (LLM processing)\n\n"
-            "Press Ctrl+C to stop",
-            title="🤖 chaobot Server",
-            border_style="green"
-        ))
+        # Print simplified status
+        channels_str = ", ".join(self.channel_manager.channels.keys())
+        console.print(f"[green]✓[/green] Server started | Channels: {channels_str}")
+        console.print("[dim]Press Ctrl+C to stop[/dim]\n")
 
         # Keep running until stop signal
         try:
@@ -87,74 +89,138 @@ class GatewayServer:
             await self._shutdown()
 
     async def _agent_processing_loop(self) -> None:
-        """Process inbound messages from the bus using AgentLoop.
+        """Process inbound messages from the bus using AgentRunner.
 
         This runs continuously, consuming messages from bus.inbound,
         processing them with LLM, and publishing responses to bus.outbound.
         """
         bus = get_bus()
 
-        console.print("[dim]🤖 Agent processing loop started[/dim]")
-
         while self.running:
             try:
                 # Get message from inbound queue
                 msg: InboundMessage = await bus.inbound.get()
 
-                console.print(f"[blue]🤖 Processing message from {msg.channel}[/blue]")
+                console.print(f"[dim]→ {msg.channel}: {msg.content[:50]}...[/dim]")
 
                 # Clean message content
                 content = self._clean_content(msg.content)
 
-                # Process with LLM
+                # Process with LLM using AgentRunner (same as CLI)
                 try:
-                    response = await self.agent_loop.run(content, session_id=msg.chat_id)
-                    response_text = response.get("content", "")
-
-                    # Format response with tool execution info
-                    logs = response.get("logs", [])
-                    if logs and len(logs) > 1:
-                        # Build formatted tool execution info
-                        tool_lines = []
-                        for log in logs[1:]:  # Skip first "Iteration 1"
-                            if "Tool calls:" in log:
-                                # Extract tool names
-                                tool_names = log.replace("Tool calls: ", "").strip("[]")
-                                tool_lines.append(f"🔧 调用工具: {tool_names}")
-                            elif "Iteration" in log:
-                                tool_lines.append(f"🔄 {log}")
-                            else:
-                                tool_lines.append(f"📋 {log}")
-
-                        if tool_lines:
-                            tool_info = "\n".join(tool_lines)
-                            response_text = f"**🤖 处理过程：**\n{tool_info}\n\n**💡 回答：**\n{response_text}"
-
+                    await self._process_message_with_progress(
+                        content,
+                        session_id=msg.chat_id,
+                        channel=msg.channel,
+                        msg_id=msg.id
+                    )
                 except Exception as e:
-                    console.print(f"[red]❌ LLM error: {e}[/red]")
-                    response_text = "抱歉，处理消息时出现错误。"
-
-                # Create outbound message
-                outbound_msg = OutboundMessage(
-                    id=msg.id,
-                    channel=msg.channel,
-                    recipient_id=msg.chat_id,
-                    content=response_text,
-                    reply_to=msg.id
-                )
-
-                # Publish to outbound queue
-                await bus.outbound.put(outbound_msg)
+                    console.print(f"[red]✗ Error: {e}[/red]")
+                    # Send error message to user
+                    outbound_msg = OutboundMessage(
+                        id=msg.id,
+                        channel=msg.channel,
+                        recipient_id=msg.chat_id,
+                        content=f"抱歉，处理消息时出现错误：{e}",
+                        reply_to=msg.id
+                    )
+                    await bus.outbound.put(outbound_msg)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                console.print(f"[red]❌ Agent processing error: {e}[/red]")
+                console.print(f"[red]✗ Error: {e}[/red]")
 
-        console.print("[dim]🤖 Agent processing loop stopped[/dim]")
+    async def _process_message_with_progress(
+        self,
+        message: str,
+        session_id: str,
+        channel: str,
+        msg_id: str
+    ) -> None:
+        """Process a message with real-time progress updates sent to user.
+
+        Args:
+            message: Message content
+            session_id: Session ID for conversation history
+            channel: Channel name (e.g., "feishu", "telegram")
+            msg_id: Original message ID for reply
+        """
+        bus = get_bus()
+
+        # Create AgentRunner with logs enabled
+        runner = AgentRunner(
+            show_logs=self.show_logs,
+            use_markdown=True,
+            stream=False,  # Server mode doesn't use streaming
+            session_id=session_id
+        )
+
+        # Track if we've sent any progress message
+        progress_sent = False
+        last_progress_content = ""
+
+        # Define progress callback that sends messages to user in real-time
+        async def on_progress(content: str, is_tool_hint: bool) -> None:
+            """Handle progress updates and send to user.
+
+            Args:
+                content: Progress message content
+                is_tool_hint: True if this is a tool execution hint (internal),
+                             False if this is assistant's natural language output
+            """
+            nonlocal progress_sent, last_progress_content
+
+            # Skip iteration messages
+            if content.startswith("Iteration"):
+                return
+
+            # Skip duplicate messages
+            if content == last_progress_content:
+                return
+            last_progress_content = content
+
+            # Log tool execution to console (for debugging)
+            if is_tool_hint and self.show_logs:
+                if content.startswith("Executing "):
+                    match = content[len("Executing "):]
+                    if "(" in match:
+                        name = match.split("(")[0]
+                        args_str = match.split("(")[1].rstrip(")")
+                        if len(args_str) > 50:
+                            args_str = args_str[:50] + "..."
+                        console.print(f"  ↳ tool({name}) -> {args_str}")
+                else:
+                    console.print(f"  ↳ {content}")
+
+            # Send assistant's natural language output to user (not tool hints)
+            # is_tool_hint=False means this is the assistant's thinking/reasoning
+            if not is_tool_hint and content.strip():
+                progress_sent = True
+                outbound_msg = OutboundMessage(
+                    id=f"{msg_id}_progress_{hash(content) & 0xFFFFFFFF}",
+                    channel=channel,
+                    recipient_id=session_id,
+                    content=content.strip(),
+                    reply_to=msg_id
+                )
+                await bus.outbound.put(outbound_msg)
+
+        # Run the agent with progress callback
+        response_text = await runner.run(message, on_progress=on_progress)
+
+        # Send final response
+        outbound_msg = OutboundMessage(
+            id=msg_id,
+            channel=channel,
+            recipient_id=session_id,
+            content=response_text,
+            reply_to=msg_id
+        )
+        await bus.outbound.put(outbound_msg)
 
     def _clean_content(self, content: str) -> str:
-        """Clean message content by removing @ mentions.
+        """Clean message content by removing bot mentions.
 
         Args:
             content: Raw message content
@@ -162,17 +228,19 @@ class GatewayServer:
         Returns:
             Cleaned content
         """
+        # Remove @_user_1 mentions (Feishu bot mention format)
         import re
-        cleaned = re.sub(r'@_user_\w+\s*', '', content)
-        return cleaned.strip()
+        cleaned = re.sub(r'@_user_\d+\s*', '', content).strip()
+        return cleaned
+
+    def _signal_handler(self, signum: int, frame: Any) -> None:
+        """Handle shutdown signals."""
+        console.print("\n[yellow]Received signal {}[/yellow]".format(signum))
+        self._stop_event.set()
 
     async def _shutdown(self) -> None:
-        """Shutdown all components gracefully."""
-        console.print("🛑 Shutting down server...")
-
-        # Cancel agent task (don't wait for it)
-        if self._agent_task:
-            self._agent_task.cancel()
+        """Shutdown the gateway gracefully."""
+        self.running = False
 
         # Stop channel manager
         await self.channel_manager.stop_all()
@@ -181,19 +249,4 @@ class GatewayServer:
         bus = get_bus()
         await bus.stop()
 
-        console.print("[green]✅ Server shutdown complete[/green]")
-
-    def stop(self) -> None:
-        """Stop the gateway server."""
-        self.running = False
-        self._stop_event.set()
-
-    def _signal_handler(self, signum: int, frame: Any) -> None:
-        """Handle signals.
-
-        Args:
-            signum: Signal number
-            frame: Current frame
-        """
-        console.print(f"\nReceived signal {signum}")
-        self.stop()
+        console.print("[green]✓[/green] Server stopped")

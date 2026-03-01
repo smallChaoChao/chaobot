@@ -33,6 +33,7 @@ dependencies = [
     "schedule>=1.2.0",
     "python-crontab>=3.0.0",
     "platformdirs>=4.0.0",
+    "flask>=3.0.0",
 ]
 
 [project.optional-dependencies]

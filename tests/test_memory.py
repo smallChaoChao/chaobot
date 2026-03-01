@@ -65,15 +65,15 @@ async def test_clear_history(memory_manager: MemoryManager) -> None:
 
 @pytest.mark.asyncio
 async def test_history_limit(memory_manager: MemoryManager) -> None:
-    """Test that history is limited to 100 messages."""
+    """Test that history is limited to 20 messages."""
     session_id = "test_session"
-    messages = [{"role": "user", "content": f"Message {i}"} for i in range(150)]
+    messages = [{"role": "user", "content": f"Message {i}"} for i in range(30)]
 
     await memory_manager.save_history(session_id, messages)
     loaded = await memory_manager.load_history(session_id)
 
-    # Should only keep last 100 messages
-    assert len(loaded) == 100
+    # Should only keep last 20 messages
+    assert len(loaded) == 20
 
 
 @pytest.mark.asyncio

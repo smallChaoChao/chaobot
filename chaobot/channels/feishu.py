@@ -128,11 +128,11 @@ class FeishuChannel(BaseChannel):
 
 
     async def send_message(self, to: str, message: str) -> None:
-        """Send a message to Feishu.
+        """Send a message to Feishu with rich text formatting.
 
         Args:
             to: Chat ID or Open ID
-            message: Message content
+            message: Message content (supports markdown-like formatting)
         """
         if not self._client:
             console.print("[red]❌ Feishu client not initialized[/red]")
@@ -146,25 +146,18 @@ class FeishuChannel(BaseChannel):
         else:
             receive_id_type = "open_id"
 
-        # Build request with markdown support
-        # Feishu supports markdown in post messages
+        # Convert markdown-like formatting to Feishu post format using formatter
+        from chaobot.utils.feishu_formatter import FeishuFormatter
+        content = FeishuFormatter.format_message(message)
+
+        # Build request with rich text support
         request = CreateMessageRequest.builder() \
             .receive_id_type(receive_id_type) \
             .request_body(
                 CreateMessageRequestBody.builder()
                 .receive_id(to)
                 .msg_type("post")
-                .content(json.dumps({
-                    "zh_cn": {
-                        "title": "",
-                        "content": [
-                            [{
-                                "tag": "text",
-                                "text": message
-                            }]
-                        ]
-                    }
-                }, ensure_ascii=False))
+                .content(json.dumps(content, ensure_ascii=False))
                 .build()
             ) \
             .build()
@@ -237,6 +230,9 @@ class FeishuChannel(BaseChannel):
             chat_id = message.chat_id
             console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
 
+            # Send "OK" reaction emoji to acknowledge message receipt
+            await self._send_reaction(chat_id, message.message_id, "OK")
+
             # Create inbound message and publish to bus
             inbound_msg = InboundMessage(
                 id=str(uuid.uuid4()),
@@ -254,3 +250,45 @@ class FeishuChannel(BaseChannel):
             console.print(f"[red]❌ Error processing message: {e}[/red]")
             import traceback
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+    async def _send_reaction(self, chat_id: str, message_id: str, emoji_type: str) -> None:
+        """Send a reaction emoji to a message.
+
+        Args:
+            chat_id: Chat ID
+            message_id: Message ID to react to
+            emoji_type: Emoji type (e.g., "OK", "THUMBSUP", "HEART")
+        """
+        if not self._client:
+            return
+
+        try:
+            # Use emoji reaction API
+            from lark_oapi.api.im.v1 import CreateMessageReactionRequest, CreateMessageReactionRequestBody
+            from lark_oapi.api.im.v1.model.emoji import Emoji
+
+            # Create Emoji object with emoji_type
+            emoji = Emoji()
+            emoji.emoji_type = emoji_type
+
+            request = CreateMessageReactionRequest.builder() \
+                .message_id(message_id) \
+                .request_body(
+                    CreateMessageReactionRequestBody.builder()
+                    .reaction_type(emoji)
+                    .build()
+                ) \
+                .build()
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self._client.im.v1.message_reaction.create(request)
+            )
+
+            if response.success():
+                console.print(f"[dim]✅ Sent {emoji_type} reaction[/dim]")
+            else:
+                console.print(f"[dim]⚠️  Failed to send reaction: {response.msg}[/dim]")
+        except Exception as e:
+            console.print(f"[dim]⚠️  Reaction error: {e}[/dim]")

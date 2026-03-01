@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaobot 配置管理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0F172A;
+            --bg-secondary: #1E293B;
+            --bg-tertiary: #334155;
+            --bg-card: #1E293B;
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --accent-primary: #22C55E;
+            --accent-secondary: #16A34A;
+            --accent-hover: #15803D;
+            --border-color: #334155;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --transition-fast: 150ms ease;
+            --transition-normal: 200ms ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            padding: 40px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+        }
+
+        header h1 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        header h1 .icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            max-width: 600px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            padding: 6px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            transition: all var(--transition-normal);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab.active {
+            color: var(--text-primary);
+            background: var(--accent-primary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card h2 {
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-primary);
+            margin-bottom: 24px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card h2 .icon {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            color: var(--text-primary);
+            font-family: 'Open Sans', sans-serif;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+        }
+
+        textarea {
+            min-height: 150px;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
+        }
+
+        select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all var(--transition-normal);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: var(--text-primary);
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--accent-secondary), var(--accent-hover));
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--text-secondary);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #EF4444, #DC2626);
+            color: var(--text-primary);
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            display: none;
+            font-weight: 500;
+            border: 1px solid transparent;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert.success {
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ADE80;
+            border-color: rgba(34, 197, 94, 0.3);
+            display: block;
+        }
+
+        .alert.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #F87171;
+            border-color: rgba(239, 68, 68, 0.3);
+            display: block;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .toast {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            max-width: 400px;
+            animation: toastSlideIn 0.3s ease;
+            cursor: pointer;
+        }
+
+        @keyframes toastSlideIn {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes toastSlideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100%); }
+        }
+
+        .toast.hiding {
+            animation: toastSlideOut 0.3s ease forwards;
+        }
+
+        .toast-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .toast.success .toast-icon {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ADE80;
+        }
+
+        .toast.error .toast-icon {
+            background: rgba(239, 68, 68, 0.2);
+            color: #F87171;
+        }
+
+        .toast.info .toast-icon {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60A5FA;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .toast-message {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Button Loading State */
+        .btn.loading {
+            position: relative;
+            color: transparent !important;
+            pointer-events: none;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            top: 50%;
+            left: 50%;
+            margin-left: -9px;
+            margin-top: -9px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            color: white;
+        }
+
+        /* Toggle Feedback */
+        .toggle-feedback {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            padding: 12px 24px;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            display: none;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .toggle-feedback.show {
+            display: flex;
+        }
+
+        /* Provider Cards */
+        .provider-card {
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin-bottom: 16px;
+            transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+        }
+
+        .provider-card:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 1px var(--accent-primary);
+        }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .provider-name {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            transition: var(--transition-normal);
+            border-radius: 28px;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-secondary);
+            transition: var(--transition-normal);
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-primary);
+            border-color: var(--accent-primary);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+            background-color: white;
+        }
+
+        /* Grid */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Info Text */
+        .info-text {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+
+        /* Section Title */
+        .section-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin: 32px 0 16px 0;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border-color);
+            font-weight: 600;
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--bg-tertiary);
+            border-top: 3px solid var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Model Select */
+        .model-select {
+            display: flex;
+            gap: 12px;
+        }
+
+        .model-select select {
+            flex: 1;
+        }
+
+        /* JSON Editor */
+        .json-editor {
+            font-family: 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            background: var(--bg-primary);
+        }
+
+        /* Sticky Save Bar */
+        .sticky-bar {
+            position: sticky;
+            bottom: 24px;
+            z-index: 100;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* Checkbox */
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+            margin-right: 8px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            header {
+                padding: 24px;
+            }
+
+            header h1 {
+                font-size: 1.75rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .tabs {
+                padding: 4px;
+            }
+
+            .tab {
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        /* Focus Visible for Accessibility */
+        *:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 2px;
+        }
+
+        button:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible {
+            outline: none;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span class="icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                </span>
+                Chaobot 配置管理
+            </h1>
+            <p>可视化配置你的 AI 助手 - 无需手动编辑 JSON 文件</p>
+        </header>
+
+        <div id="alert" class="alert"></div>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- Toggle Feedback -->
+        <div class="toggle-feedback" id="toggle-feedback">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6 9 17l-5-5"/>
+            </svg>
+            <span id="toggle-feedback-text">设置已更新</span>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('basic')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 1v6m0 6v6m4.22-10.22 4.24-4.24M6.34 6.34 2.1 2.1m17.8 17.8-4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24-4.24-4.24M6.34 6.34l-4.24-4.24"/>
+                </svg>
+                基础配置
+            </button>
+            <button class="tab" onclick="showTab('providers')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v4"/>
+                    <path d="m16.2 7.8 2.9-2.9"/>
+                    <path d="M18 12h4"/>
+                    <path d="m16.2 16.2 2.9 2.9"/>
+                    <path d="M12 18v4"/>
+                    <path d="m4.9 19.1 2.9-2.9"/>
+                    <path d="M2 12h4"/>
+                    <path d="m4.9 4.9 2.9 2.9"/>
+                </svg>
+                模型提供商
+            </button>
+            <button class="tab" onclick="showTab('channels')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 18a5 5 0 0 0-10 0"/>
+                    <line x1="12" x2="12" y1="9" y2="2"/>
+                    <line x1="4.22" x2="5.64" y1="10.22" y2="11.64"/>
+                    <line x1="1" x2="3" y1="18" y2="18"/>
+                    <line x1="21" x2="23" y1="18" y2="18"/>
+                    <line x1="18.36" x2="19.78" y1="11.64" y2="10.22"/>
+                    <line x1="23" x2="1" y1="22" y2="22"/>
+                    <polyline points="16 5 12 9 8 5"/>
+                </svg>
+                消息频道
+            </button>
+            <button class="tab" onclick="showTab('advanced')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
+                    <path d="m9 12 2 2 4-4"/>
+                </svg>
+                高级设置
+            </button>
+            <button class="tab" onclick="showTab('json')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 18 22 12 16 6"/>
+                    <polyline points="8 6 2 12 8 18"/>
+                </svg>
+                JSON 编辑
+            </button>
+        </div>
+
+        <!-- 基础配置 -->
+        <div id="basic" class="tab-content active">
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.29 7 12 12 20.71 7"/>
+                            <line x1="12" x2="12" y1="22" y2="12"/>
+                        </svg>
+                    </span>
+                    模型设置
+                </h2>
+                
+                <div class="form-group">
+                    <label>默认模型</label>
+                    <input type="text" id="model-name" placeholder="例如: qwen3.5-plus, gpt-4o, claude-3-5-sonnet">
+                    <p class="info-text">输入你想要使用的 AI 模型名称。如果当前模型额度用完，可以切换到其他模型。留空将使用默认模型。系统会自动选择第一个启用的 Provider。</p>
+                </div>
+
+                <div class="form-group">
+                    <label>模型提供商（可选）</label>
+                    <select id="model-provider">
+                        <option value="">自动选择（推荐）</option>
+                    </select>
+                    <p class="info-text">选择模型提供商。留空将自动选择第一个启用的 Provider（推荐）。只有在需要强制使用特定 Provider 时才手动选择。</p>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>温度 (Temperature)</label>
+                        <input type="number" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                        <p class="info-text">控制输出的随机性。较低值使输出更确定，较高值使输出更有创意。推荐: 0.7</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>最大 Token 数</label>
+                        <input type="number" id="max-tokens" min="100" max="128000" step="100" value="4096">
+                        <p class="info-text">单次回复的最大长度。留空表示使用模型默认值。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </span>
+                    代理设置
+                </h2>
+                
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>最大迭代次数</label>
+                        <input type="number" id="max-iterations" min="1" max="100" value="50">
+                        <p class="info-text">工具调用的最大循环次数，防止无限循环。</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>上下文窗口</label>
+                        <input type="number" id="context-window" min="1000" max="200000" step="1000" value="100000">
+                        <p class="info-text">保留的对话历史长度（字符数）。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模型提供商 -->
+        <div id="providers" class="tab-content">
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                        </svg>
+                    </span>
+                    配置模型提供商
+                </h2>
+                <p class="info-text" style="margin-bottom: 24px;">启用并配置你想要使用的 AI 提供商。至少需要启用一个。</p>
+                
+                <div id="providers-list">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 消息频道 -->
+        <div id="channels" class="tab-content">
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </span>
+                    消息频道
+                </h2>
+                <p class="info-text" style="margin-bottom: 24px;">配置消息频道，让 Chaobot 可以在不同平台接收和发送消息。</p>
+                
+                <div class="section-title">飞书 (Lark)</div>
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name">飞书机器人</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="feishu-enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>App ID</label>
+                        <input type="text" id="feishu-app-id" placeholder="cli_xxxxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label>App Secret</label>
+                        <input type="password" id="feishu-app-secret" placeholder="你的 App Secret">
+                    </div>
+                </div>
+
+                <div class="section-title">Telegram</div>
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name">Telegram Bot</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="telegram-enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Bot Token</label>
+                        <input type="password" id="telegram-token" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
+                    </div>
+                </div>
+
+                <div class="section-title">Discord</div>
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name">Discord Bot</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="discord-enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Bot Token</label>
+                        <input type="password" id="discord-token" placeholder="你的 Discord Bot Token">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 高级设置 -->
+        <div id="advanced" class="tab-content">
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </span>
+                    安全设置
+                </h2>
+                
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="confirm-destructive" checked>
+                        确认破坏性操作
+                    </label>
+                    <p class="info-text">在执行可能破坏数据的操作前要求确认。</p>
+                </div>
+
+                <div class="form-group">
+                    <label>允许的命令（白名单）</label>
+                    <textarea id="allowed-commands" rows="3" placeholder="每行一个命令，如:&#10;git&#10;python&#10;npm"></textarea>
+                    <p class="info-text">如果设置，只允许执行这些命令。留空表示允许所有命令（不推荐）。</p>
+                </div>
+
+                <div class="form-group">
+                    <label>禁止的命令（黑名单）</label>
+                    <textarea id="blocked-commands" rows="3" placeholder="每行一个命令，如:&#10;rm&#10;mkfs&#10;dd"></textarea>
+                    <p class="info-text">禁止执行的命令。这些命令将被拒绝执行。</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="m21 21-4.3-4.3"/>
+                        </svg>
+                    </span>
+                    工具设置
+                </h2>
+                
+                <div class="form-group">
+                    <label>Brave Search API Key</label>
+                    <input type="password" id="brave-api-key" placeholder="用于网页搜索功能">
+                    <p class="info-text">可选。用于增强网页搜索功能。获取地址: https://brave.com/search/api/</p>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="restrict-workspace">
+                        限制在工作目录
+                    </label>
+                    <p class="info-text">只允许访问工作目录内的文件，防止意外修改系统文件。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- JSON 编辑 -->
+        <div id="json" class="tab-content">
+            <div class="card">
+                <h2>
+                    <span class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="16 18 22 12 16 6"/>
+                            <polyline points="8 6 2 12 8 18"/>
+                        </svg>
+                    </span>
+                    原始 JSON 编辑
+                </h2>
+                <p class="info-text" style="margin-bottom: 20px;">直接编辑配置文件。请确保 JSON 格式正确。</p>
+                
+                <div class="form-group">
+                    <textarea id="json-editor" class="json-editor" rows="30"></textarea>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveRawConfig()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        保存 JSON
+                    </button>
+                    <button class="btn btn-secondary" onclick="formatJson()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 7 4 4 20 4 20 7"/>
+                            <line x1="9" x2="15" y1="20" y2="20"/>
+                            <line x1="12" x2="12" y1="4" y2="20"/>
+                        </svg>
+                        格式化
+                    </button>
+                    <button class="btn btn-danger" onclick="resetConfig()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                            <path d="M3 3v5h5"/>
+                        </svg>
+                        重置为默认
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 保存按钮 -->
+        <div class="sticky-bar">
+            <div class="btn-group" style="margin: 0;">
+                <button class="btn btn-primary" onclick="saveConfig()" style="font-size: 15px; padding: 14px 32px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                        <polyline points="17 21 17 13 7 13 7 21"/>
+                        <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    保存所有配置
+                </button>
+                <button class="btn btn-secondary" onclick="loadConfig()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M16 16h5v5"/>
+                    </svg>
+                    重新加载
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = {};
+        let providers = [];
+        let models = [];
+
+        // 初始化
+        async function init() {
+            await Promise.all([
+                loadProviders(),
+                loadModels(),
+                loadConfig()
+            ]);
+        }
+
+        // 显示标签页
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        // 显示提示
+        function showAlert(message, type = 'success') {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert ${type} show`;
+            setTimeout(() => alert.classList.remove('show'), 5000);
+        }
+
+        // Toast 提示
+        function showToast(title, message, type = 'success', duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const iconSvg = type === 'success' 
+                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+                : type === 'error'
+                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>'
+                : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>';
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${iconSvg}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+            `;
+            
+            toast.addEventListener('click', () => hideToast(toast));
+            container.appendChild(toast);
+            
+            setTimeout(() => hideToast(toast), duration);
+        }
+
+        function hideToast(toast) {
+            toast.classList.add('hiding');
+            setTimeout(() => toast.remove(), 300);
+        }
+
+        // 显示切换反馈
+        function showToggleFeedback(text) {
+            const feedback = document.getElementById('toggle-feedback');
+            const feedbackText = document.getElementById('toggle-feedback-text');
+            feedbackText.textContent = text;
+            feedback.classList.add('show');
+            setTimeout(() => feedback.classList.remove('show'), 2000);
+        }
+
+        // 设置按钮加载状态
+        function setButtonLoading(button, loading = true) {
+            if (loading) {
+                button.classList.add('loading');
+                button.disabled = true;
+            } else {
+                button.classList.remove('loading');
+                button.disabled = false;
+            }
+        }
+
+        // 加载提供商列表
+        async function loadProviders() {
+            try {
+                const response = await fetch('/api/providers');
+                const result = await response.json();
+                if (result.success) {
+                    providers = result.data;
+                    const select = document.getElementById('model-provider');
+                    select.innerHTML = '<option value="">选择提供商...</option>' +
+                        providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                    
+                    renderProvidersList();
+                }
+            } catch (error) {
+                console.error('Failed to load providers:', error);
+            }
+        }
+
+        // 加载模型列表
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/models');
+                const result = await response.json();
+                if (result.success) {
+                    models = result.data;
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        // Provider 优先级顺序（与后端保持一致）
+        const PROVIDER_PRIORITY = [
+            'openrouter',
+            'anthropic',
+            'openai',
+            'deepseek',
+            'groq',
+            'gemini',
+            'custom'
+        ];
+
+        // 获取第一个启用的 Provider
+        function getFirstEnabledProvider(config) {
+            if (!config.providers) return null;
+            
+            for (const name of PROVIDER_PRIORITY) {
+                const providerConfig = config.providers[name];
+                if (providerConfig && providerConfig.enabled && providerConfig.api_key) {
+                    return name;
+                }
+            }
+            return null;
+        }
+
+        // 根据模型名称检测提供商（仅用于建议，不强制）
+        function detectProviderFromModel(modelName) {
+            if (!modelName) return '';
+            
+            // 检查是否包含提供商前缀
+            if (modelName.includes('/')) {
+                return modelName.split('/')[0];
+            }
+            
+            // 尝试从模型列表中匹配
+            const model = models.find(m => m.id === modelName || m.id.endsWith('/' + modelName));
+            if (model) {
+                return model.provider;
+            }
+            
+            return '';
+        }
+
+        // 渲染提供商列表
+        function renderProvidersList() {
+            const container = document.getElementById('providers-list');
+            container.innerHTML = providers.map(p => `
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <div>
+                            <div class="provider-name">${p.name}</div>
+                            <p class="info-text">${p.description}</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="provider-${p.id}-enabled" 
+                                onchange="toggleProvider('${p.id}')">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div id="provider-${p.id}-config" style="display: none;">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="provider-${p.id}-api-key" 
+                                placeholder="你的 API Key">
+                        </div>
+                        <div class="form-group">
+                            <label>API Base (可选)</label>
+                            <input type="text" id="provider-${p.id}-api-base" 
+                                placeholder="自定义 API 地址">
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>超时时间 (秒)</label>
+                                <input type="number" id="provider-${p.id}-timeout" 
+                                    value="60" min="10" max="300">
+                            </div>
+                            <div class="form-group">
+                                <label>最大重试次数</label>
+                                <input type="number" id="provider-${p.id}-retries" 
+                                    value="3" min="0" max="10">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 切换提供商显示
+        function toggleProvider(providerId) {
+            const checkbox = document.getElementById(`provider-${providerId}-enabled`);
+            const config = document.getElementById(`provider-${providerId}-config`);
+            config.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        // 加载配置
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentConfig = result.data;
+                    populateForm(currentConfig);
+                    document.getElementById('json-editor').value = JSON.stringify(currentConfig, null, 2);
+                    showAlert('配置加载成功');
+                } else {
+                    showAlert('加载配置失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('加载配置失败: ' + error.message, 'error');
+            }
+        }
+
+        // 填充表单
+        function populateForm(config) {
+            // 基础配置
+            if (config.agents?.defaults) {
+                const defaults = config.agents.defaults;
+                
+                // 模型
+                document.getElementById('model-name').value = defaults.model || '';
+                
+                // 设置提供商：优先使用配置的值，如果没有则使用第一个启用的 provider
+                let providerToSet = defaults.provider;
+                if (!providerToSet || providerToSet === 'custom') {
+                    providerToSet = getFirstEnabledProvider(config);
+                }
+                if (providerToSet) {
+                    document.getElementById('model-provider').value = providerToSet;
+                }
+                
+                document.getElementById('temperature').value = defaults.temperature ?? 0.7;
+                document.getElementById('max-tokens').value = defaults.max_tokens || '';
+            }
+            
+            // 代理设置
+            if (config.agents) {
+                document.getElementById('max-iterations').value = config.agents.max_iterations ?? 50;
+                document.getElementById('context-window').value = config.agents.context_window ?? 100000;
+            }
+            
+            // 提供商配置
+            if (config.providers) {
+                for (const [key, value] of Object.entries(config.providers)) {
+                    const enabledCheckbox = document.getElementById(`provider-${key}-enabled`);
+                    if (enabledCheckbox) {
+                        enabledCheckbox.checked = value.enabled;
+                        toggleProvider(key);
+                        
+                        if (value.api_key) {
+                            document.getElementById(`provider-${key}-api-key`).value = value.api_key;
+                        }
+                        if (value.api_base) {
+                            document.getElementById(`provider-${key}-api-base`).value = value.api_base;
+                        }
+                        if (value.timeout) {
+                            document.getElementById(`provider-${key}-timeout`).value = value.timeout;
+                        }
+                        if (value.max_retries !== undefined) {
+                            document.getElementById(`provider-${key}-retries`).value = value.max_retries;
+                        }
+                    }
+                }
+            }
+            
+            // 频道配置
+            if (config.channels) {
+                if (config.channels.feishu) {
+                    document.getElementById('feishu-enabled').checked = config.channels.feishu.enabled;
+                    document.getElementById('feishu-app-id').value = config.channels.feishu.app_id || '';
+                    document.getElementById('feishu-app-secret').value = config.channels.feishu.app_secret || '';
+                }
+                if (config.channels.telegram) {
+                    document.getElementById('telegram-enabled').checked = config.channels.telegram.enabled;
+                    document.getElementById('telegram-token').value = config.channels.telegram.token || '';
+                }
+                if (config.channels.discord) {
+                    document.getElementById('discord-enabled').checked = config.channels.discord.enabled;
+                    document.getElementById('discord-token').value = config.channels.discord.token || '';
+                }
+            }
+            
+            // 安全设置
+            if (config.security) {
+                document.getElementById('confirm-destructive').checked = config.security.confirm_destructive_actions ?? true;
+                document.getElementById('allowed-commands').value = (config.security.allowed_commands || []).join('\n');
+                document.getElementById('blocked-commands').value = (config.security.blocked_commands || []).join('\n');
+            }
+            
+            // 工具设置
+            if (config.tools) {
+                document.getElementById('brave-api-key').value = config.tools.brave_api_key || '';
+                document.getElementById('restrict-workspace').checked = config.tools.restrict_to_workspace ?? false;
+            }
+        }
+
+        // 收集表单数据
+        function collectFormData() {
+            const config = JSON.parse(JSON.stringify(currentConfig));
+            
+            // 基础配置
+            if (!config.agents) config.agents = {};
+            if (!config.agents.defaults) config.agents.defaults = {};
+            
+            const provider = document.getElementById('model-provider').value;
+            const model = document.getElementById('model-name').value.trim();
+            
+            // 模型名称可以为空，使用默认值
+            config.agents.defaults.model = model || null;
+            
+            // 设置提供商：如果用户选择了则使用，否则自动选择第一个启用的
+            if (provider && provider !== 'custom') {
+                config.agents.defaults.provider = provider;
+            } else {
+                // 自动选择第一个启用的 provider
+                const autoProvider = getFirstEnabledProvider(config);
+                config.agents.defaults.provider = autoProvider || 'openrouter';
+            }
+            config.agents.defaults.temperature = parseFloat(document.getElementById('temperature').value);
+            config.agents.defaults.max_tokens = parseInt(document.getElementById('max-tokens').value) || null;
+            
+            config.agents.max_iterations = parseInt(document.getElementById('max-iterations').value);
+            config.agents.context_window = parseInt(document.getElementById('context-window').value);
+            
+            // 提供商配置
+            if (!config.providers) config.providers = {};
+            providers.forEach(p => {
+                if (!config.providers[p.id]) config.providers[p.id] = {};
+                config.providers[p.id].enabled = document.getElementById(`provider-${p.id}-enabled`).checked;
+                config.providers[p.id].api_key = document.getElementById(`provider-${p.id}-api-key`).value || null;
+                config.providers[p.id].api_base = document.getElementById(`provider-${p.id}-api-base`).value || null;
+                config.providers[p.id].timeout = parseInt(document.getElementById(`provider-${p.id}-timeout`).value) || 60;
+                config.providers[p.id].max_retries = parseInt(document.getElementById(`provider-${p.id}-retries`).value) ?? 3;
+            });
+            
+            // 频道配置
+            if (!config.channels) config.channels = {};
+            config.channels.feishu = {
+                enabled: document.getElementById('feishu-enabled').checked,
+                app_id: document.getElementById('feishu-app-id').value || null,
+                app_secret: document.getElementById('feishu-app-secret').value || null
+            };
+            config.channels.telegram = {
+                enabled: document.getElementById('telegram-enabled').checked,
+                token: document.getElementById('telegram-token').value || null
+            };
+            config.channels.discord = {
+                enabled: document.getElementById('discord-enabled').checked,
+                token: document.getElementById('discord-token').value || null
+            };
+            
+            // 安全设置
+            if (!config.security) config.security = {};
+            config.security.confirm_destructive_actions = document.getElementById('confirm-destructive').checked;
+            config.security.allowed_commands = document.getElementById('allowed-commands').value
+                .split('\n').filter(s => s.trim());
+            config.security.blocked_commands = document.getElementById('blocked-commands').value
+                .split('\n').filter(s => s.trim());
+            
+            // 工具设置
+            if (!config.tools) config.tools = {};
+            config.tools.brave_api_key = document.getElementById('brave-api-key').value || null;
+            config.tools.restrict_to_workspace = document.getElementById('restrict-workspace').checked;
+            
+            return config;
+        }
+
+        // 保存配置
+        async function saveConfig() {
+            try {
+                const config = collectFormData();
+                
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentConfig = config;
+                    document.getElementById('json-editor').value = JSON.stringify(config, null, 2);
+                    showAlert('配置保存成功！');
+                } else {
+                    showAlert('保存失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('保存失败: ' + error.message, 'error');
+            }
+        }
+
+        // 保存原始 JSON
+        async function saveRawConfig() {
+            try {
+                const content = document.getElementById('json-editor').value;
+                
+                const response = await fetch('/api/config/raw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('JSON 保存成功！');
+                    loadConfig(); // 重新加载
+                } else {
+                    showAlert('保存失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('保存失败: ' + error.message, 'error');
+            }
+        }
+
+        // 格式化 JSON
+        function formatJson() {
+            try {
+                const editor = document.getElementById('json-editor');
+                const obj = JSON.parse(editor.value);
+                editor.value = JSON.stringify(obj, null, 2);
+                showAlert('JSON 格式化成功');
+            } catch (error) {
+                showAlert('JSON 格式错误: ' + error.message, 'error');
+            }
+        }
+
+        // 重置配置
+        async function resetConfig() {
+            if (!confirm('确定要重置为默认配置吗？当前配置将被覆盖。')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/config/reset', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('配置已重置为默认值');
+                    loadConfig();
+                } else {
+                    showAlert('重置失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('重置失败: ' + error.message, 'error');
+            }
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
