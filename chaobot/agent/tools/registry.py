@@ -6,6 +6,11 @@ from chaobot.agent.tools.base import BaseTool, ToolResult
 from chaobot.agent.tools.shell import ShellTool
 from chaobot.agent.tools.file import FileReadTool, FileWriteTool, FileEditTool
 from chaobot.agent.tools.web import WebSearchTool, WebFetchTool
+from chaobot.agent.tools.browser import (
+    BrowserNavigateTool, BrowserClickTool, BrowserInputTool,
+    BrowserScreenshotTool, BrowserGetHtmlTool, BrowserScrollTool,
+    BrowserFindElementTool
+)
 from chaobot.config.schema import Config
 
 
@@ -24,7 +29,7 @@ class ToolRegistry:
 
     def _register_default_tools(self) -> None:
         """Register default tools.
-        
+
         NOTE: Only core, fundamental tools should be registered here.
         Specific capabilities like weather queries should be implemented as Skills,
         not as core Tools. Skills use these core Tools to accomplish their tasks.
@@ -36,6 +41,14 @@ class ToolRegistry:
             FileEditTool(self.config),
             WebSearchTool(self.config),
             WebFetchTool(self.config),
+            # Browser automation tools (Phase 3)
+            BrowserNavigateTool(self.config),
+            BrowserClickTool(self.config),
+            BrowserInputTool(self.config),
+            BrowserScreenshotTool(self.config),
+            BrowserGetHtmlTool(self.config),
+            BrowserScrollTool(self.config),
+            BrowserFindElementTool(self.config),
         ]
 
         for tool in tools:
