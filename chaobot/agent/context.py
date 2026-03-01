@@ -4,7 +4,6 @@ from typing import Any
 
 from chaobot.config.schema import Config
 from chaobot.skills import get_skills_loader
-from chaobot.skills.selector import get_skill_selector
 
 
 DEFAULT_SYSTEM_PROMPT = """You are chaobot, a helpful AI assistant.
@@ -93,15 +92,12 @@ class ContextBuilder:
                 system_prompt += f"\n\n# Active Skills (Always Loaded)\n\n{always_content}"
 
         # Add skills summary with instructions
+        # This follows nanobot's progressive disclosure principle:
+        # Only metadata (name + description) is loaded into context
+        # Full skill content is loaded on-demand when LLM decides to use it
         skills_summary = self.skills.build_skills_summary()
         if skills_summary:
             system_prompt += f"\n\n{SKILLS_INSTRUCTION}{skills_summary}\n\n---\n\nWhen you need to perform a task, first check if there's a relevant skill above. If so, read its SKILL.md file using the file_read tool to learn how to use it."
-
-        # Add smart skill recommendations based on user input
-        selector = get_skill_selector(self.skills)
-        recommendations = selector.build_skill_recommendation(user_message)
-        if recommendations:
-            system_prompt += recommendations
 
         # Build system message with tools
         system_msg = {"role": "system", "content": system_prompt}
