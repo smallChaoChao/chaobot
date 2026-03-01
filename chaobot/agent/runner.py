@@ -12,6 +12,7 @@ from rich.text import Text
 
 from chaobot.agent.loop import AgentLoop
 from chaobot.agent.memory import MemoryManager
+from chaobot.agent.tools.confirmation import ConfirmationManager, console_confirmation_callback
 from chaobot.config.manager import ConfigManager
 from chaobot.utils.progress import ProgressTracker, SimpleProgressTracker
 
@@ -66,7 +67,8 @@ class AgentRunner:
         show_logs: bool = False,
         use_markdown: bool = True,
         stream: bool = True,
-        session_id: str | None = None
+        session_id: str | None = None,
+        confirm_sensitive: bool = True
     ) -> None:
         """Initialize runner.
 
@@ -75,14 +77,21 @@ class AgentRunner:
             use_markdown: Whether to render markdown output
             stream: Whether to use streaming response
             session_id: Session ID for conversation history
+            confirm_sensitive: Whether to confirm sensitive operations
         """
         self.show_logs = show_logs
         self.use_markdown = use_markdown
         self.stream = stream
         self.session_id = session_id or "default"
+        self.confirm_sensitive = confirm_sensitive
         self.config = ConfigManager().load()
         self.loop = AgentLoop(self.config)
         self.memory = MemoryManager(self.config)
+
+        # Set up confirmation callback for CLI mode
+        if confirm_sensitive:
+            confirmation_manager = ConfirmationManager()
+            confirmation_manager.set_callback(console_confirmation_callback)
 
     def run_single(self, message: str) -> None:
         """Run a single message and exit.
@@ -119,16 +128,12 @@ class AgentRunner:
                                     arguments[k] = v
                         skill = detect_skill(name, arguments)
                         if skill:
-                            # Show skill format with arguments
+                            # Show skill format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
-                            if args_display and len(args_display) > 50:
-                                args_display = args_display[:47] + "..."
                             console.print(f"  [dim]↳ skill[{skill}]({name}) -> {args_display}[/dim]" if args_display else f"  [dim]↳ skill[{skill}]({name})[/dim]")
                         else:
-                            # Show tool format with arguments
+                            # Show tool format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
-                            if args_display and len(args_display) > 50:
-                                args_display = args_display[:47] + "..."
                             console.print(f"  [dim]↳ tool[{name}] -> {args_display}[/dim]" if args_display else f"  [dim]↳ tool[{name}][/dim]")
             elif self.show_logs:
                 # General progress
@@ -196,16 +201,12 @@ class AgentRunner:
                                     arguments[k] = v
                         skill = detect_skill(name, arguments)
                         if skill:
-                            # Show skill format with arguments
+                            # Show skill format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
-                            if args_display and len(args_display) > 50:
-                                args_display = args_display[:47] + "..."
                             console.print(f"  [dim]↳ skill[{skill}]({name}) -> {args_display}[/dim]" if args_display else f"  [dim]↳ skill[{skill}]({name})[/dim]")
                         else:
-                            # Show tool format with arguments
+                            # Show tool format with FULL arguments when show_logs is True
                             args_display = ", ".join([f"{k}={v}" for k, v in arguments.items()]) if arguments else ""
-                            if args_display and len(args_display) > 50:
-                                args_display = args_display[:47] + "..."
                             console.print(f"  [dim]↳ tool[{name}] -> {args_display}[/dim]" if args_display else f"  [dim]↳ tool[{name}][/dim]")
             elif self.show_logs:
                 # General progress

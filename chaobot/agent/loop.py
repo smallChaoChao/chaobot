@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator, Callable, Awaitable
 from chaobot.agent.context import ContextBuilder
 from chaobot.agent.memory import MemoryManager
 from chaobot.agent.tools import ToolRegistry
+from chaobot.agent.tools.confirmation import ConfirmationManager
 from chaobot.config.schema import Config
 from chaobot.providers.base import BaseProvider
 from chaobot.providers.registry import ProviderRegistry
@@ -294,6 +295,19 @@ class AgentLoop:
                 await on_progress(f"Executing {name}({args_str})", True)
 
             try:
+                # Check for user confirmation for sensitive operations
+                confirmation_manager = ConfirmationManager()
+                confirmation = await confirmation_manager.confirm(name, arguments)
+
+                if not confirmation.approved:
+                    results.append({
+                        "tool_call_id": tool_call_id,
+                        "content": f"Operation cancelled: {confirmation.message}"
+                    })
+                    if on_progress:
+                        await on_progress(f"✗ {name} cancelled: {confirmation.message}", True)
+                    continue
+
                 result = await self.tools.execute(name, arguments)
                 results.append({
                     "tool_call_id": tool_call_id,
