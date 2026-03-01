@@ -68,11 +68,6 @@ class FeishuChannel(BaseChannel):
         self._running = True
         self._loop = asyncio.get_event_loop()
 
-        # Register outbound handler with message bus
-        bus = get_bus()
-        bus.on_outbound(self._handle_outbound)
-        console.print("[dim]📤 Registered with message bus[/dim]")
-
         # Create Lark client for sending messages
         try:
             self._client = lark.Client.builder() \
@@ -132,16 +127,7 @@ class FeishuChannel(BaseChannel):
 
         console.print("[green]✅ Feishu channel stopped[/green]")
 
-    async def _handle_outbound(self, message: OutboundMessage) -> None:
-        """Handle outbound messages from the bus.
 
-        Args:
-            message: Outbound message to send
-        """
-        if message.channel != self.name:
-            return
-
-        await self.send_message(message.recipient_id, message.content)
 
     async def send_message(self, to: str, message: str) -> None:
         """Send a message to Feishu.
