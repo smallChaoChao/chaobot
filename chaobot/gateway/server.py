@@ -9,7 +9,8 @@ from rich.panel import Panel
 
 from chaobot.channels.feishu import FeishuChannel
 from chaobot.config.manager import ConfigManager
-from chaobot.core.bus import OutboundMessage, get_bus
+from chaobot.core.agent import MessageAgent
+from chaobot.core.bus import get_bus
 
 console = Console()
 
@@ -23,6 +24,7 @@ class GatewayServer:
         self.channels: list[Any] = []
         self.running = False
         self._stop_event = asyncio.Event()
+        self._agent: MessageAgent | None = None
 
     def start(self) -> None:
         """Start the gateway server."""
@@ -56,20 +58,22 @@ class GatewayServer:
         bus = get_bus()
         await bus.start()
 
+        # Start agent (subscribes to inbound messages)
+        self._agent = MessageAgent(self.config)
+        await self._agent.start()
+
         # Start all channels
         tasks = []
         for channel in self.channels:
             console.print(f"📡 Starting {channel.name} channel...")
             tasks.append(asyncio.create_task(channel.start()))
 
-        # Register a simple echo handler for inbound messages
-        bus.on_inbound(self._handle_inbound)
-
         console.print(Panel.fit(
             "✅ Server is running\n\n"
             "Active channels:\n" +
             "\n".join([f"  • {ch.name}" for ch in self.channels]) +
-            "\n\nPress Ctrl+C to stop",
+            "\n  • Agent (LLM processing)\n\n"
+            "Press Ctrl+C to stop",
             title="🤖 chaobot Server",
             border_style="green"
         ))
@@ -80,34 +84,12 @@ class GatewayServer:
         except asyncio.CancelledError:
             pass
         finally:
-            # Stop all channels
+            # Stop all components
+            if self._agent:
+                await self._agent.stop()
             for channel in self.channels:
                 await channel.stop()
             await bus.stop()
-
-    async def _handle_inbound(self, message) -> None:
-        """Handle inbound messages from the bus.
-
-        Args:
-            message: Inbound message
-        """
-        console.print(f"[blue]🔄 Processing message from {message.channel}[/blue]")
-
-        # Simple echo for now - integrate with Agent in the future
-        response_text = f"Echo: {message.content}"
-
-        # Create outbound message
-        outbound_msg = OutboundMessage(
-            id=message.id,
-            channel=message.channel,
-            recipient_id=message.chat_id,
-            content=response_text,
-            reply_to=message.id
-        )
-
-        # Publish to bus for channels to handle
-        bus = get_bus()
-        await bus.publish_outbound(outbound_msg)
 
     def stop(self) -> None:
         """Stop the gateway server."""
