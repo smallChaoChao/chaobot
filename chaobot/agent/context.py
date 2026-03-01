@@ -49,11 +49,23 @@ class ContextBuilder:
         """
         messages = []
 
-        # System prompt with tools if provided
+        # System prompt with skills and tools
         system_prompt = (
             self.config.agents.defaults.system_prompt
             or DEFAULT_SYSTEM_PROMPT
         )
+
+        # Add always skills to system prompt
+        always_skills = self.skills.get_always_skills()
+        if always_skills:
+            always_content = self.skills.load_skills_for_context(always_skills)
+            if always_content:
+                system_prompt += f"\n\n# Active Skills\n\n{always_content}"
+
+        # Add skills summary
+        skills_summary = self.skills.build_skills_summary()
+        if skills_summary:
+            system_prompt += f"\n\n# Available Skills\n\n{skills_summary}"
 
         # Build system message with tools
         system_msg = {"role": "system", "content": system_prompt}
