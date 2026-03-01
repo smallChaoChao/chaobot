@@ -1,5 +1,7 @@
 """Context builder for agent prompts."""
 
+import os
+from pathlib import Path
 from typing import Any
 
 from chaobot.config.schema import Config
@@ -17,7 +19,7 @@ Guidelines:
 - Always prioritize user safety and privacy
 - State intent before tool calls, but NEVER predict or claim results before receiving them
 - Before modifying a file, read it first. Do not assume files or directories exist
-- After writing or editing a file, re-read it if accuracy matters
+- After writing or editing a file, re-read if accuracy matters
 - If a tool call fails, analyze the error before retrying with a different approach
 """
 
@@ -59,6 +61,24 @@ class ContextBuilder:
         """
         self.config = config
         self.skills = get_skills_loader()
+        self.workspace_dir = Path.home() / ".chaobot" / "workspace"
+
+    def _load_workspace_file(self, filename: str) -> str | None:
+        """Load a workspace file if it exists.
+
+        Args:
+            filename: Name of the file (e.g., "SOUL.md")
+
+        Returns:
+            File content or None if not found
+        """
+        filepath = self.workspace_dir / filename
+        if filepath.exists():
+            try:
+                return filepath.read_text(encoding="utf-8")
+            except Exception:
+                return None
+        return None
 
     def build(
         self,
@@ -83,6 +103,24 @@ class ContextBuilder:
             self.config.agents.defaults.system_prompt
             or DEFAULT_SYSTEM_PROMPT
         )
+
+        # Inject workspace files (OpenClaw-style progressive disclosure)
+        # These define behavior, personality, and tool knowledge
+
+        # 1. SOUL.md - Behavioral guidelines and personality
+        soul_content = self._load_workspace_file("SOUL.md")
+        if soul_content:
+            system_prompt += f"\n\n# Behavioral Guidelines\n\n{soul_content}"
+
+        # 2. TOOLS.md - Tool capabilities and best practices
+        tools_content = self._load_workspace_file("TOOLS.md")
+        if tools_content:
+            system_prompt += f"\n\n# Tool Guidelines\n\n{tools_content}"
+
+        # 3. AGENTS.md - Multi-agent workflows and patterns
+        agents_content = self._load_workspace_file("AGENTS.md")
+        if agents_content:
+            system_prompt += f"\n\n# Agent Coordination\n\n{agents_content}"
 
         # Add always skills to system prompt (these are loaded automatically)
         always_skills = self.skills.get_always_skills()
