@@ -9,7 +9,6 @@ from rich.panel import Panel
 
 from chaobot.channels.feishu import FeishuChannel
 from chaobot.config.manager import ConfigManager
-from chaobot.gateway.websocket import WebSocketManager
 
 console = Console()
 
@@ -55,19 +54,11 @@ class GatewayServer:
             console.print(f"📡 Starting {channel.name} channel...")
             tasks.append(asyncio.create_task(channel.start()))
 
-        # Start WebSocket server
-        ws_manager = WebSocketManager(
-            host="0.0.0.0",
-            port=8765
-        )
-        tasks.append(asyncio.create_task(ws_manager.start()))
-
         console.print(Panel.fit(
             "✅ Server is running\n\n"
             "Active channels:\n" +
             "\n".join([f"  • {ch.name}" for ch in self.channels]) +
-            "\n  • WebSocket (ws://localhost:8765)\n\n"
-            "Press Ctrl+C to stop",
+            "\n\nPress Ctrl+C to stop",
             title="🤖 chaobot Server",
             border_style="green"
         ))
@@ -81,7 +72,6 @@ class GatewayServer:
             # Stop all channels
             for channel in self.channels:
                 await channel.stop()
-            await ws_manager.stop()
 
     def stop(self) -> None:
         """Stop the gateway server."""

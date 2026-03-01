@@ -1,12 +1,23 @@
-"""Feishu (Lark) channel implementation."""
+"""Feishu (Lark) channel implementation using WebSocket long connection."""
 
 import asyncio
-import hashlib
 import json
+import threading
+import time
 from typing import Any
 
-import httpx
 from rich.console import Console
+
+try:
+    import lark_oapi as lark
+    from lark_oapi.api.im.v1 import (
+        CreateMessageRequest,
+        CreateMessageRequestBody,
+        P2ImMessageReceiveV1,
+    )
+    FEISHU_AVAILABLE = True
+except ImportError:
+    FEISHU_AVAILABLE = False
 
 from chaobot.channels.base import BaseChannel
 
@@ -14,7 +25,7 @@ console = Console()
 
 
 class FeishuChannel(BaseChannel):
-    """Feishu/Lark bot channel."""
+    """Feishu/Lark bot channel using WebSocket long connection."""
 
     name = "feishu"
 
@@ -26,52 +37,96 @@ class FeishuChannel(BaseChannel):
         """
         super().__init__(config)
         self.enabled = config.channels.feishu.enabled
-        self.app_id = config.channels.feishu.app_id
-        self.app_secret = config.channels.feishu.app_secret
-        self.webhook_url = config.channels.feishu.webhook_url
-        self.bot_name = config.channels.feishu.bot_name
-        self.allow_users = config.channels.feishu.allow_from
+        self.app_id = config.channels.feishu.app_id or ""
+        self.app_secret = config.channels.feishu.app_secret or ""
+        self.encrypt_key = config.channels.feishu.encrypt_key or ""
+        self.verification_token = config.channels.feishu.verification_token or ""
+        self.allow_users = config.channels.feishu.allow_from or []
 
         self._running = False
-        self._client: httpx.AsyncClient | None = None
-        self._token: str | None = None
-        self._token_expires: int = 0
+        self._client: Any = None
+        self._ws_client: Any = None
+        self._ws_thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def is_enabled(self) -> bool:
         """Check if channel is enabled."""
+        if not FEISHU_AVAILABLE:
+            console.print("[red]❌ lark-oapi not installed. Run: pip install lark-oapi[/red]")
+            return False
         return self.enabled and bool(self.app_id and self.app_secret)
 
     async def start(self) -> None:
-        """Start the Feishu channel."""
+        """Start the Feishu channel with WebSocket long connection."""
         if not self.is_enabled():
             console.print("[yellow]⚠️  Feishu channel not enabled or missing credentials[/yellow]")
             return
 
-        console.print(f"[blue]📝 Feishu App ID: {self.app_id}[/blue]")
+        console.print(f"[blue]📝 Feishu App ID: {self.app_id[:10]}...[/blue]")
         self._running = True
-        self._client = httpx.AsyncClient(timeout=30)
+        self._loop = asyncio.get_event_loop()
 
-        # Get tenant access token
-        console.print("[blue]🔑 Getting Feishu access token...[/blue]")
-        await self._refresh_token()
+        # Create Lark client for sending messages
+        try:
+            self._client = lark.Client.builder() \
+                .app_id(self.app_id) \
+                .app_secret(self.app_secret) \
+                .log_level(lark.LogLevel.INFO) \
+                .build()
+            console.print("[green]✅ Feishu client created[/green]")
+        except Exception as e:
+            console.print(f"[red]❌ Failed to create Feishu client: {e}[/red]")
+            return
 
-        if self._token:
-            console.print("[green]✅ Feishu token obtained successfully[/green]")
-        else:
-            console.print("[red]❌ Failed to get Feishu token[/red]")
+        # Create event handler for receiving messages
+        event_handler = lark.EventDispatcherHandler.builder(
+            self.encrypt_key,
+            self.verification_token,
+        ).register_p2_im_message_receive_v1(
+            self._on_message_sync
+        ).build()
 
-        # Start webhook server if configured
-        if self.webhook_url:
-            console.print(f"[blue]🌐 Starting Feishu webhook server at {self.webhook_url}...[/blue]")
-            asyncio.create_task(self._webhook_server())
-        else:
-            console.print("[yellow]⚠️  No webhook URL configured[/yellow]")
+        # Create WebSocket client for long connection
+        self._ws_client = lark.ws.Client(
+            self.app_id,
+            self.app_secret,
+            event_handler=event_handler,
+            log_level=lark.LogLevel.INFO
+        )
+
+        console.print("[blue]🔌 Starting Feishu WebSocket connection...[/blue]")
+
+        # Start WebSocket client in a separate thread with auto-reconnect
+        def run_ws():
+            while self._running:
+                try:
+                    console.print("[blue]🔄 Connecting to Feishu WebSocket...[/blue]")
+                    self._ws_client.start()
+                except Exception as e:
+                    console.print(f"[yellow]⚠️  Feishu WebSocket error: {e}[/yellow]")
+                if self._running:
+                    console.print("[yellow]🔄 Reconnecting in 5 seconds...[/yellow]")
+                    time.sleep(5)
+
+        self._ws_thread = threading.Thread(target=run_ws, daemon=True)
+        self._ws_thread.start()
+        console.print("[green]✅ Feishu WebSocket started in background thread[/green]")
 
     async def stop(self) -> None:
         """Stop the Feishu channel."""
         self._running = False
-        if self._client:
-            await self._client.aclose()
+        console.print("[yellow]🛑 Stopping Feishu channel...[/yellow]")
+
+        if self._ws_client:
+            try:
+                self._ws_client.stop()
+            except Exception as e:
+                console.print(f"[yellow]⚠️  Error stopping WebSocket: {e}[/yellow]")
+
+        if self._ws_thread and self._ws_thread.is_alive():
+            self._ws_thread.join(timeout=5)
+
+        console.print("[green]✅ Feishu channel stopped[/green]")
 
     async def send_message(self, to: str, message: str) -> None:
         """Send a message to Feishu.
@@ -81,20 +136,10 @@ class FeishuChannel(BaseChannel):
             message: Message content
         """
         if not self._client:
+            console.print("[red]❌ Feishu client not initialized[/red]")
             return
 
-        # Ensure token is valid
-        if not self._token or asyncio.get_event_loop().time() > self._token_expires:
-            await self._refresh_token()
-
-        url = "https://open.feishu.cn/open-apis/im/v1/messages"
-
-        headers = {
-            "Authorization": f"Bearer {self._token}",
-            "Content-Type": "application/json"
-        }
-
-        # Determine if it's a user or chat
+        # Determine receive_id_type
         if to.startswith("ou_"):
             receive_id_type = "open_id"
         elif to.startswith("oc_"):
@@ -102,160 +147,95 @@ class FeishuChannel(BaseChannel):
         else:
             receive_id_type = "open_id"
 
-        data = {
-            "receive_id": to,
-            "msg_type": "text",
-            "content": json.dumps({"text": message})
-        }
+        # Build request
+        request = CreateMessageRequest.builder() \
+            .receive_id_type(receive_id_type) \
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(to)
+                .msg_type("text")
+                .content(json.dumps({"text": message}))
+                .build()
+            ) \
+            .build()
 
+        # Send message in executor (since lark client is sync)
+        loop = asyncio.get_event_loop()
         try:
-            response = await self._client.post(
-                url,
-                headers=headers,
-                params={"receive_id_type": receive_id_type},
-                json=data
+            response = await loop.run_in_executor(
+                None,
+                lambda: self._client.im.v1.message.create(request)
             )
-            response.raise_for_status()
-        except httpx.HTTPError as e:
-            print(f"Failed to send Feishu message: {e}")
 
-    async def _refresh_token(self) -> None:
-        """Refresh tenant access token."""
-        if not self._client:
-            return
-
-        url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-
-        data = {
-            "app_id": self.app_id,
-            "app_secret": self.app_secret
-        }
-
-        try:
-            response = await self._client.post(url, json=data)
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("code") == 0:
-                self._token = result["tenant_access_token"]
-                # Token expires in expire - 60 seconds (buffer)
-                self._token_expires = asyncio.get_event_loop().time() + result.get("expire", 7200) - 60
+            if response.success():
+                console.print(f"[green]✅ Message sent to {to}[/green]")
             else:
-                print(f"Failed to get Feishu token: {result}")
-        except httpx.HTTPError as e:
-            print(f"Failed to refresh Feishu token: {e}")
+                console.print(f"[red]❌ Failed to send message: {response.msg}[/red]")
+        except Exception as e:
+            console.print(f"[red]❌ Error sending message: {e}[/red]")
 
-    async def _webhook_server(self) -> None:
-        """Start webhook server for receiving messages."""
-        from aiohttp import web
-
-        async def handle_webhook(request: web.Request) -> web.Response:
-            """Handle incoming webhook."""
-            try:
-                body = await request.json()
-                console.print(f"[dim]📥 Received webhook: {json.dumps(body, ensure_ascii=False)[:200]}...[/dim]")
-
-                # Verify signature if encrypt key is configured
-                if not self._verify_signature(request):
-                    console.print("[red]❌ Signature verification failed[/red]")
-                    return web.Response(status=401)
-
-                # Handle challenge (for URL verification)
-                if "challenge" in body:
-                    console.print(f"[blue]📝 Handling challenge: {body['challenge'][:20]}...[/blue]")
-                    return web.json_response({"challenge": body["challenge"]})
-
-                # Process message
-                console.print("[blue]🔄 Processing message...[/blue]")
-                await self._process_message(body)
-
-                return web.Response(status=200)
-            except Exception as e:
-                console.print(f"[red]❌ Error handling Feishu webhook: {e}[/red]")
-                import traceback
-                console.print(f"[dim]{traceback.format_exc()}[/dim]")
-                return web.Response(status=500)
-
-        app = web.Application()
-        app.router.add_post("/webhook/feishu", handle_webhook)
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-
-        # Parse webhook URL to get port
-        from urllib.parse import urlparse
-        parsed = urlparse(self.webhook_url)
-        port = parsed.port or 8080
-
-        site = web.TCPSite(runner, "0.0.0.0", port)
-        await site.start()
-
-        print(f"Feishu webhook server started on port {port}")
-
-        # Keep running
-        while self._running:
-            await asyncio.sleep(1)
-
-        await runner.cleanup()
-
-    def _verify_signature(self, request: Any) -> bool:
-        """Verify webhook signature.
+    def _on_message_sync(self, data: P2ImMessageReceiveV1) -> None:
+        """Sync handler for incoming messages (called from WebSocket thread).
 
         Args:
-            request: HTTP request
-
-        Returns:
-            True if signature is valid
+            data: Message data from Feishu
         """
-        # TODO: Implement signature verification
-        return True
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._on_message(data), self._loop)
 
-    async def _process_message(self, data: dict) -> None:
-        """Process incoming message.
+    async def _on_message(self, data: P2ImMessageReceiveV1) -> None:
+        """Handle incoming message from Feishu.
 
         Args:
             data: Message data
         """
-        event = data.get("event", {})
-        message = event.get("message", {})
-
-        console.print(f"[dim]📨 Event type: {event.get('type', 'unknown')}[/dim]")
-        console.print(f"[dim]📨 Message type: {message.get('message_type', 'unknown')}[/dim]")
-
-        # Check if it's a text message
-        if message.get("message_type") != "text":
-            console.print("[yellow]⚠️  Not a text message, skipping[/yellow]")
-            return
-
-        # Get sender info
-        sender = event.get("sender", {})
-        sender_id = sender.get("sender_id", {}).get("open_id")
-        sender_name = sender.get("sender_id", {}).get("union_id", "Unknown")
-
-        console.print(f"[blue]👤 Message from: {sender_name} ({sender_id})[/blue]")
-
-        # Check if sender is allowed
-        if self.allow_users and sender_id not in self.allow_users:
-            console.print(f"[yellow]⚠️  Sender {sender_id} not in allowlist[/yellow]")
-            return
-
-        # Get message content
         try:
-            content = json.loads(message.get("content", "{}"))
-            text = content.get("text", "")
-        except json.JSONDecodeError:
-            console.print("[red]❌ Failed to parse message content[/red]")
-            return
+            event = data.event
+            message = event.message
+            sender = event.sender
 
-        console.print(f"[green]💬 Message: {text[:50]}...[/green]")
+            console.print(f"[dim]📨 Event type: {event.type}[/dim]")
+            console.print(f"[dim]📨 Message type: {message.message_type}[/dim]")
 
-        # Get chat ID
-        chat_id = message.get("chat_id")
-        console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
+            # Skip bot messages
+            if sender.sender_type == "bot":
+                console.print("[yellow]⚠️  Skipping bot message[/yellow]")
+                return
 
-        # TODO: Send to agent for processing
-        # For now, just echo back
-        response = f"Echo: {text}"
-        console.print(f"[blue]📤 Sending response: {response[:50]}...[/blue]")
-        await self.send_message(chat_id, response)
-        console.print("[green]✅ Response sent[/green]")
+            # Get sender info
+            sender_id = sender.sender_id.open_id
+            sender_name = sender.sender_id.union_id or "Unknown"
+
+            console.print(f"[blue]👤 Message from: {sender_name} ({sender_id})[/blue]")
+
+            # Check if sender is allowed
+            if self.allow_users and sender_id not in self.allow_users:
+                console.print(f"[yellow]⚠️  Sender {sender_id} not in allowlist[/yellow]")
+                return
+
+            # Parse message content
+            msg_type = message.message_type
+            content_json = json.loads(message.content)
+
+            if msg_type == "text":
+                text = content_json.get("text", "")
+            else:
+                text = f"[Unsupported message type: {msg_type}]"
+
+            console.print(f"[green]💬 Message: {text[:100]}...[/green]")
+
+            # Get chat ID for reply
+            chat_id = message.chat_id
+            console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
+
+            # TODO: Integrate with Agent for processing
+            # For now, echo back
+            response = f"Echo: {text}"
+            console.print(f"[blue]📤 Sending response: {response[:50]}...[/blue]")
+            await self.send_message(chat_id, response)
+            console.print("[green]✅ Response sent[/green]")
+
+        except Exception as e:
+            console.print(f"[red]❌ Error processing message: {e}[/red]")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
