@@ -213,6 +213,8 @@ class OpenAICompatibleProvider(BaseProvider):
                 formatted_msg["tool_calls"] = msg["tool_calls"]
             if "tool_call_id" in msg:
                 formatted_msg["tool_call_id"] = msg["tool_call_id"]
+            if "name" in msg:
+                formatted_msg["name"] = msg["name"]
 
             formatted.append(formatted_msg)
 

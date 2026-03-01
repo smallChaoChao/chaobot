@@ -46,12 +46,19 @@ class ContextBuilder:
         """
         messages = []
 
-        # System prompt
+        # System prompt with tools if provided
         system_prompt = (
             self.config.agents.defaults.system_prompt
             or DEFAULT_SYSTEM_PROMPT
         )
-        messages.append({"role": "system", "content": system_prompt})
+
+        # Build system message with tools
+        system_msg = {"role": "system", "content": system_prompt}
+        if tools:
+            # Store tools in metadata for provider to extract
+            system_msg["tools"] = tools
+
+        messages.append(system_msg)
 
         # Add history
         if history:
@@ -77,6 +84,7 @@ class ContextBuilder:
         self,
         messages: list[dict[str, Any]],
         tool_call_id: str,
+        tool_name: str,
         result: str
     ) -> list[dict[str, Any]]:
         """Add tool result to messages.
@@ -84,6 +92,7 @@ class ContextBuilder:
         Args:
             messages: Current messages
             tool_call_id: Tool call ID
+            tool_name: Tool name
             result: Tool execution result
 
         Returns:
@@ -92,6 +101,7 @@ class ContextBuilder:
         messages.append({
             "role": "tool",
             "tool_call_id": tool_call_id,
+            "name": tool_name,
             "content": result
         })
         return messages
