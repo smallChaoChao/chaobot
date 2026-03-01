@@ -210,7 +210,19 @@ class OpenAICompatibleProvider(BaseProvider):
 
             # Handle tool calls and results
             if "tool_calls" in msg:
-                formatted_msg["tool_calls"] = msg["tool_calls"]
+                # Convert tool_calls to OpenAI format
+                formatted_tool_calls = []
+                for tc in msg["tool_calls"]:
+                    formatted_tc = {
+                        "id": tc.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("name", ""),
+                            "arguments": json.dumps(tc.get("arguments", {})) if isinstance(tc.get("arguments"), dict) else tc.get("arguments", "{}")
+                        }
+                    }
+                    formatted_tool_calls.append(formatted_tc)
+                formatted_msg["tool_calls"] = formatted_tool_calls
             if "tool_call_id" in msg:
                 formatted_msg["tool_call_id"] = msg["tool_call_id"]
             if "name" in msg:
