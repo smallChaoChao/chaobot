@@ -291,7 +291,8 @@ class AgentLoop:
 
             # Notify progress - tool execution start
             if on_progress:
-                args_str = self._format_arguments(arguments)
+                # Format full arguments for display (no truncation)
+                args_str = self._format_arguments_full(arguments)
                 await on_progress(f"Executing {name}({args_str})", True)
 
             try:
@@ -362,7 +363,7 @@ class AgentLoop:
 
     @staticmethod
     def _format_arguments(arguments: dict[str, Any]) -> str:
-        """Format arguments for display.
+        """Format arguments for display (with truncation for concise output).
 
         Args:
             arguments: Tool arguments
@@ -378,6 +379,28 @@ class AgentLoop:
             val_str = str(value)
             if len(val_str) > 30:
                 val_str = val_str[:27] + "..."
+            parts.append(f"{key}={val_str}")
+
+        return ", ".join(parts)
+
+    @staticmethod
+    def _format_arguments_full(arguments: dict[str, Any]) -> str:
+        """Format arguments for display (full version, no truncation).
+
+        Args:
+            arguments: Tool arguments
+
+        Returns:
+            Formatted string with full argument values
+        """
+        if not arguments:
+            return ""
+
+        parts = []
+        for key, value in arguments.items():
+            val_str = str(value)
+            # Escape newlines for display
+            val_str = val_str.replace("\n", "\\n").replace("\r", "\\r")
             parts.append(f"{key}={val_str}")
 
         return ", ".join(parts)

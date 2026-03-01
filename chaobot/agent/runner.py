@@ -228,6 +228,11 @@ class AgentRunner:
             response: Response dictionary
         """
         content = response.get("content", "")
+        error = response.get("error", "")
+
+        # Display error if present
+        if error and self.show_logs:
+            console.print(f"[bold red]Error: {error}[/bold red]")
 
         if self.use_markdown:
             console.print("[bold blue]chaobot:[/bold blue]")
