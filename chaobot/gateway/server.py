@@ -5,9 +5,11 @@ import signal
 from typing import Any
 
 from rich.console import Console
+from rich.panel import Panel
 
 from chaobot.channels.feishu import FeishuChannel
 from chaobot.config.manager import ConfigManager
+from chaobot.gateway.websocket import WebSocketManager
 
 console = Console()
 
@@ -20,6 +22,7 @@ class GatewayServer:
         self.config = ConfigManager().load()
         self.channels: list[Any] = []
         self.running = False
+        self._stop_event = asyncio.Event()
 
     def start(self) -> None:
         """Start the gateway server."""
@@ -42,7 +45,7 @@ class GatewayServer:
         try:
             asyncio.run(self._run())
         except KeyboardInterrupt:
-            console.print("\n👋 Gateway stopped")
+            console.print("\n👋 Server stopped")
 
     async def _run(self) -> None:
         """Run the gateway."""
@@ -52,22 +55,39 @@ class GatewayServer:
             console.print(f"📡 Starting {channel.name} channel...")
             tasks.append(asyncio.create_task(channel.start()))
 
-        console.print("✅ Gateway running. Press Ctrl+C to stop.")
+        # Start WebSocket server
+        ws_manager = WebSocketManager(
+            host="0.0.0.0",
+            port=8765
+        )
+        tasks.append(asyncio.create_task(ws_manager.start()))
 
-        # Wait for all channels
+        console.print(Panel.fit(
+            "✅ Server is running\n\n"
+            "Active channels:\n" +
+            "\n".join([f"  • {ch.name}" for ch in self.channels]) +
+            "\n  • WebSocket (ws://localhost:8765)\n\n"
+            "Press Ctrl+C to stop",
+            title="🤖 chaobot Server",
+            border_style="green"
+        ))
+
+        # Keep running until stop signal
         try:
-            await asyncio.gather(*tasks)
+            await self._stop_event.wait()
         except asyncio.CancelledError:
             pass
+        finally:
+            # Stop all channels
+            for channel in self.channels:
+                await channel.stop()
+            await ws_manager.stop()
 
     def stop(self) -> None:
         """Stop the gateway server."""
         self.running = False
-        console.print("🛑 Stopping gateway...")
-
-        # Stop all channels
-        for channel in self.channels:
-            asyncio.create_task(channel.stop())
+        console.print("🛑 Stopping server...")
+        self._stop_event.set()
 
     def _init_channels(self) -> None:
         """Initialize enabled channels based on configuration."""

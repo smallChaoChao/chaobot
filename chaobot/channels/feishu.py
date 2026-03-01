@@ -6,8 +6,11 @@ import json
 from typing import Any
 
 import httpx
+from rich.console import Console
 
 from chaobot.channels.base import BaseChannel
+
+console = Console()
 
 
 class FeishuChannel(BaseChannel):
@@ -41,17 +44,28 @@ class FeishuChannel(BaseChannel):
     async def start(self) -> None:
         """Start the Feishu channel."""
         if not self.is_enabled():
+            console.print("[yellow]⚠️  Feishu channel not enabled or missing credentials[/yellow]")
             return
 
+        console.print(f"[blue]📝 Feishu App ID: {self.app_id}[/blue]")
         self._running = True
         self._client = httpx.AsyncClient(timeout=30)
 
         # Get tenant access token
+        console.print("[blue]🔑 Getting Feishu access token...[/blue]")
         await self._refresh_token()
+
+        if self._token:
+            console.print("[green]✅ Feishu token obtained successfully[/green]")
+        else:
+            console.print("[red]❌ Failed to get Feishu token[/red]")
 
         # Start webhook server if configured
         if self.webhook_url:
+            console.print(f"[blue]🌐 Starting Feishu webhook server at {self.webhook_url}...[/blue]")
             asyncio.create_task(self._webhook_server())
+        else:
+            console.print("[yellow]⚠️  No webhook URL configured[/yellow]")
 
     async def stop(self) -> None:
         """Stop the Feishu channel."""
@@ -139,21 +153,27 @@ class FeishuChannel(BaseChannel):
             """Handle incoming webhook."""
             try:
                 body = await request.json()
+                console.print(f"[dim]📥 Received webhook: {json.dumps(body, ensure_ascii=False)[:200]}...[/dim]")
 
                 # Verify signature if encrypt key is configured
                 if not self._verify_signature(request):
+                    console.print("[red]❌ Signature verification failed[/red]")
                     return web.Response(status=401)
 
                 # Handle challenge (for URL verification)
                 if "challenge" in body:
+                    console.print(f"[blue]📝 Handling challenge: {body['challenge'][:20]}...[/blue]")
                     return web.json_response({"challenge": body["challenge"]})
 
                 # Process message
+                console.print("[blue]🔄 Processing message...[/blue]")
                 await self._process_message(body)
 
                 return web.Response(status=200)
             except Exception as e:
-                print(f"Error handling Feishu webhook: {e}")
+                console.print(f"[red]❌ Error handling Feishu webhook: {e}[/red]")
+                import traceback
+                console.print(f"[dim]{traceback.format_exc()}[/dim]")
                 return web.Response(status=500)
 
         app = web.Application()
@@ -199,26 +219,43 @@ class FeishuChannel(BaseChannel):
         event = data.get("event", {})
         message = event.get("message", {})
 
+        console.print(f"[dim]📨 Event type: {event.get('type', 'unknown')}[/dim]")
+        console.print(f"[dim]📨 Message type: {message.get('message_type', 'unknown')}[/dim]")
+
         # Check if it's a text message
         if message.get("message_type") != "text":
+            console.print("[yellow]⚠️  Not a text message, skipping[/yellow]")
             return
 
         # Get sender info
         sender = event.get("sender", {})
         sender_id = sender.get("sender_id", {}).get("open_id")
+        sender_name = sender.get("sender_id", {}).get("union_id", "Unknown")
+
+        console.print(f"[blue]👤 Message from: {sender_name} ({sender_id})[/blue]")
 
         # Check if sender is allowed
         if self.allow_users and sender_id not in self.allow_users:
+            console.print(f"[yellow]⚠️  Sender {sender_id} not in allowlist[/yellow]")
             return
 
         # Get message content
-        content = json.loads(message.get("content", "{}"))
-        text = content.get("text", "")
+        try:
+            content = json.loads(message.get("content", "{}"))
+            text = content.get("text", "")
+        except json.JSONDecodeError:
+            console.print("[red]❌ Failed to parse message content[/red]")
+            return
+
+        console.print(f"[green]💬 Message: {text[:50]}...[/green]")
 
         # Get chat ID
         chat_id = message.get("chat_id")
+        console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
 
         # TODO: Send to agent for processing
         # For now, just echo back
         response = f"Echo: {text}"
+        console.print(f"[blue]📤 Sending response: {response[:50]}...[/blue]")
         await self.send_message(chat_id, response)
+        console.print("[green]✅ Response sent[/green]")
