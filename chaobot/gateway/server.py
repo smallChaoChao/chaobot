@@ -23,7 +23,7 @@ class GatewayServer:
 
     def start(self) -> None:
         """Start the gateway server."""
-        console.print("🚀 Starting chaobot gateway...")
+        console.print("🚀 Starting chaobot server...")
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)

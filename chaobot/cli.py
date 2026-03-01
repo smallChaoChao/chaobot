@@ -62,8 +62,8 @@ def run(message: str | None, no_markdown: bool, logs: bool, no_stream: bool, ses
 
 
 @cli.command()
-def gateway() -> None:
-    """Start the gateway (connects to enabled channels)."""
+def server() -> None:
+    """Start the server (connects to enabled channels)."""
     from chaobot.gateway.server import GatewayServer
 
     server = GatewayServer()
