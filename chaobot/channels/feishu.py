@@ -21,7 +21,7 @@ except ImportError:
     FEISHU_AVAILABLE = False
 
 from chaobot.channels.base import BaseChannel
-from chaobot.core.bus import InboundMessage, OutboundMessage, get_bus
+from chaobot.bus import InboundMessage, get_bus
 
 console = Console()
 
