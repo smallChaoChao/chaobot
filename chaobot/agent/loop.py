@@ -105,7 +105,7 @@ class AgentLoop:
 
                 return {
                     "content": content,
-                    "logs": logs if self.config.agents.defaults.model == "debug" else [],
+                    "logs": logs,
                     "iterations": self.iteration_count
                 }
 

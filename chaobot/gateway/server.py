@@ -108,8 +108,25 @@ class GatewayServer:
 
                 # Process with LLM
                 try:
+                    # Send "processing" message first
+                    processing_msg = OutboundMessage(
+                        id=msg.id + "_processing",
+                        channel=msg.channel,
+                        recipient_id=msg.chat_id,
+                        content="🤖 正在思考...",
+                        reply_to=msg.id
+                    )
+                    await bus.outbound.put(processing_msg)
+
                     response = await self.agent_loop.run(content, session_id=msg.chat_id)
                     response_text = response.get("content", "")
+
+                    # Add tool execution info if available
+                    logs = response.get("logs", [])
+                    if logs and len(logs) > 1:
+                        tool_info = "\n".join([f"🔧 {log}" for log in logs[1:]])
+                        response_text = f"{tool_info}\n\n{response_text}"
+
                 except Exception as e:
                     console.print(f"[red]❌ LLM error: {e}[/red]")
                     response_text = "抱歉，处理消息时出现错误。"
