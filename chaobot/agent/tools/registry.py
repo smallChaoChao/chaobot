@@ -23,7 +23,12 @@ class ToolRegistry:
         self._register_default_tools()
 
     def _register_default_tools(self) -> None:
-        """Register default tools."""
+        """Register default tools.
+        
+        NOTE: Only core, fundamental tools should be registered here.
+        Specific capabilities like weather queries should be implemented as Skills,
+        not as core Tools. Skills use these core Tools to accomplish their tasks.
+        """
         tools = [
             ShellTool(self.config),
             FileReadTool(self.config),

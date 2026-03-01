@@ -11,9 +11,11 @@
 - 🪶 **轻量级**: 核心代码简洁，易于理解和扩展
 - 🔐 **安全**: 多层安全控制，工作区隔离，命令白名单
 - ⚡ **高性能**: 全异步架构，支持流式响应
-- 🛠️ **可扩展**: 插件化工具系统，易于添加新功能
+- 🛠️ **可扩展**: 插件化工具系统 + Skill 技能系统，易于添加新功能
+- 🎨 **美观**: 使用 Rich 库提供优雅的 CLI 界面，带工具调用进度展示
+- 🖥️ **可视化配置**: 内置 Dashboard 配置界面，无需手动编辑 JSON
+- 🧠 **智能**: Skill 系统让 AI 自主学习新能力
 - 💪 **类型安全**: 完整的类型注解，IDE 友好
-- 🎨 **美观**: 使用 Rich 库提供优雅的 CLI 界面
 - 🔄 **热重载**: 配置文件修改后自动生效
 
 ## 🚀 快速开始
@@ -48,7 +50,29 @@ chaobot init
 #   ~/.chaobot/workspace/sessions/
 ```
 
-### 3. 配置 API 密钥
+### 3. 配置 API 密钥（两种方式）
+
+#### 方式一：使用 Dashboard 可视化界面（推荐）
+
+```bash
+# 启动配置界面，自动打开浏览器
+chaobot config
+
+# 或者指定端口
+chaobot config --port 8888
+
+# 不自动打开浏览器
+chaobot config --no-browser
+```
+
+在 Dashboard 中你可以：
+- 🎯 切换 AI 模型（支持 OpenAI、Claude、Qwen、DeepSeek 等）
+- 🔌 配置多个 Provider
+- 📱 设置消息频道（飞书、Telegram、Discord）
+- 🛡️ 配置安全选项
+- 📝 直接编辑 JSON 配置
+
+#### 方式二：手动编辑配置文件
 
 编辑配置文件 `~/.chaobot/config.json`：
 
@@ -75,8 +99,18 @@ chaobot init
 - OpenAI / Azure OpenAI
 - OpenRouter (推荐，支持多种模型)
 - Anthropic Claude
-- 阿里云 DashScope
+- 阿里云 DashScope (Qwen 系列)
+- DeepSeek
+- Groq
+- Google Gemini
 - 其他 OpenAI 兼容 API
+
+**支持的模型示例**:
+- `anthropic/claude-3-5-sonnet-20241022` (推荐)
+- `openai/gpt-4o`
+- `qwen-max` / `qwen3.5-plus` (阿里云)
+- `deepseek-chat`
+- `llama-3.1-70b-versatile`
 
 ### 4. 开始使用
 
@@ -91,11 +125,47 @@ chaobot run
 chaobot run -s work
 chaobot run -s personal
 
+# 显示详细工具调用日志
+chaobot run --logs
+
 # 查看状态
 chaobot status
 
 # 显示帮助
 chaobot --help
+```
+
+### Session 会话管理
+
+不同会话的对话历史完全隔离，适合区分工作、个人等不同场景：
+
+```bash
+# 启动 Session 管理 Web 界面（默认命令）
+chaobot session
+
+# 指定端口启动
+chaobot session --port 8080
+
+# 列出所有会话
+chaobot session list
+
+# 清除指定会话的历史
+chaobot session clear work
+
+# 清除所有会话
+chaobot session clear --all
+```
+
+**使用场景示例**:
+```bash
+# 工作会话 - 技术问题
+chaobot run -s work
+
+# 个人会话 - 生活咨询  
+chaobot run -s personal
+
+# 项目会话 - 特定项目
+chaobot run -s project-name
 ```
 
 ## 📖 使用指南
@@ -110,31 +180,60 @@ Options:
   -s, --session TEXT      指定会话 ID（默认: default）
   --no-markdown          禁用 Markdown 渲染
   --no-stream            禁用流式响应
-  --logs                 显示运行时日志
+  --logs                 显示运行时日志和工具调用进度
   --help                 显示帮助信息
+```
+
+### Skill 技能系统
+
+chaobot 采用 **Skill 系统** 扩展 AI 能力。Skills 是 Markdown 格式的文档，教 AI 如何使用工具完成特定任务。
+
+**工作原理**:
+1. 用户提问时，AI 查看可用的 Skills 列表
+2. 如果有相关 Skill，AI 会读取 SKILL.md 学习如何使用
+3. AI 使用核心 Tools 执行 Skill 中的步骤
+4. 返回结果给用户
+
+**已安装的 Skills**:
+- 🌤️ **weather** - 查询天气（使用 wttr.in）
+- 🔍 **tavily-search** - AI 搜索引擎（需要 API Key）
+- 🐙 **github** - GitHub CLI 操作（需要 gh）
+- 🧠 **memory** - 长期记忆管理
+- 📋 **summarize** - 内容摘要
+- 🛡️ **skill-vetter** - Skill 安全检查
+
+**示例**:
+```
+用户: 杭州天气如何
+AI: [读取 weather skill] → [调用 shell 执行 curl] → 杭州今天 13°C，多云
 ```
 
 ### 工具使用
 
-chaobot 支持多种工具，AI 会根据需要自动调用：
+chaobot 核心提供基础 Tools，Skills 使用这些 Tools 完成复杂任务：
 
-**Shell 工具**
-```
-用户: 查看当前目录下的文件
-AI: [调用 shell 工具执行 ls -la]
+**核心 Tools**:
+- `shell` - 执行 shell 命令
+- `file_read` / `file_write` / `file_edit` - 文件操作
+- `web_search` / `web_fetch` - 网络搜索和获取
+
+**工具调用日志**（使用 `--logs` 开启）:
+```bash
+$ chaobot run --logs
+You: 杭州今天多少度
+Iteration 1/50
+  ↳ tool[file_read] -> path=/Users/.../weather/SKILL.md
+Iteration 2/50
+  ↳ skill[weather](shell) -> command=curl -s "wttr.in/Hangzhou?format=3"
+Iteration 3/50
+chaobot:
+杭州今天天气：🌦️ +14°C，湿度94%...
 ```
 
-**文件工具**
-```
-用户: 读取 README.md 文件
-AI: [调用 file_read 工具读取文件]
-```
-
-**Web 搜索**
-```
-用户: 搜索 Python 最新版本
-AI: [调用 web_search 工具搜索]
-```
+**日志格式说明**:
+- `skill[skill_name](tool_name) -> params` - Skill 调用，显示参数
+- `tool[tool_name] -> params` - 普通工具调用
+- 参数自动截断，保持输出整洁
 
 ### 会话管理
 
@@ -176,10 +275,13 @@ chaobot/
 │   │   ├── loop.py      #    Agent 循环
 │   │   ├── memory.py    #    记忆管理
 │   │   ├── runner.py    #    运行器
-│   │   └── tools/       #    工具集
+│   │   ├── context.py   #    上下文构建（含 Skills 提示）
+│   │   └── tools/       #    核心工具集
 │   ├── channels/        # 📱 聊天频道
 │   ├── config/          # ⚙️ 配置管理
+│   ├── dashboard/       # 🖥️ 可视化配置界面
 │   ├── providers/       # 🤖 LLM Provider
+│   ├── skills/          # 📝 Skill 技能文档
 │   └── cli.py           #    CLI 入口
 ├── tests/               # 🧪 单元测试
 ├── docs/                # 📚 文档
@@ -199,6 +301,50 @@ chaobot/
 ```
 
 ## 🔧 高级配置
+
+### Dashboard 配置界面
+
+chaobot 提供两个 Web 管理界面：
+
+#### 1. Config 配置界面
+
+可视化配置 AI 模型、API 密钥、消息频道等：
+
+```bash
+# 启动配置界面
+chaobot config
+
+# 选项
+--host TEXT     绑定地址（默认: 127.0.0.1）
+--port INTEGER  端口（默认: 8080）
+--no-browser    不自动打开浏览器
+```
+
+**界面特性**：
+- 🎨 现代化深色主题设计
+- 🔔 操作反馈提示（Toast 通知）
+- ⏳ 按钮加载状态
+- 📱 响应式布局支持移动端
+
+#### 2. Session 会话管理界面
+
+可视化管理和查看对话历史：
+
+```bash
+# 启动会话管理界面（默认命令）
+chaobot session
+
+# 选项
+--host TEXT     绑定地址（默认: 127.0.0.1）
+--port INTEGER  端口（默认: 5000）
+```
+
+**界面特性**：
+- 📊 会话统计概览
+- 🔍 会话搜索功能
+- 💬 消息查看和编辑
+- 🔔 操作反馈提示（Toast 通知）
+- 🎨 与 Config 界面一致的深色主题
 
 ### 安全配置
 
@@ -239,6 +385,20 @@ chaobot/
 }
 ```
 
+### 模型切换示例
+
+当某个模型额度用完时，快速切换到其他模型：
+
+```bash
+# 方式一：使用 Dashboard
+chaobot config
+# 在界面中选择新的模型，保存即可
+
+# 方式二：手动编辑
+# 修改 ~/.chaobot/config.json 中的 model 字段
+# 例如从 qwen-max 切换到 qwen3.5-plus
+```
+
 ## 🛡️ 安全性
 
 - **工作区隔离**: 文件操作限制在配置的工作区内
@@ -246,6 +406,7 @@ chaobot/
 - **危险命令拦截**: 自动拦截 rm -rf / 等危险操作
 - **路径遍历防护**: 防止 ../../../etc/passwd 等攻击
 - **超时控制**: 命令执行默认 60 秒超时
+- **Skill 安全检查**: 自动验证 Skill 的安全性
 
 ## 🧪 开发
 

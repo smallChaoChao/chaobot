@@ -1,7 +1,7 @@
 """Main agent loop for LLM interaction."""
 
 import asyncio
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable, Awaitable
 
 from chaobot.agent.context import ContextBuilder
 from chaobot.agent.memory import MemoryManager
@@ -11,8 +11,23 @@ from chaobot.providers.base import BaseProvider
 from chaobot.providers.registry import ProviderRegistry
 
 
+# Progress callback type
+ProgressCallback = Callable[[str, bool], Awaitable[None]]
+
+
 class AgentLoop:
     """Main agent loop handling LLM interaction and tool execution."""
+
+    # Provider priority order (first match wins)
+    PROVIDER_PRIORITY = [
+        "openrouter",
+        "anthropic",
+        "openai",
+        "deepseek",
+        "groq",
+        "gemini",
+        "custom",
+    ]
 
     def __init__(self, config: Config) -> None:
         """Initialize agent loop.
@@ -31,27 +46,82 @@ class AgentLoop:
     def _get_provider(self) -> BaseProvider:
         """Get the configured LLM provider.
 
+        If a specific provider is configured in agents.defaults.provider,
+        use that one. Otherwise, auto-select the first enabled provider
+        based on priority order.
+
         Returns:
             Provider instance
         """
         registry = ProviderRegistry()
-        return registry.get_provider(
-            self.config.agents.defaults.provider,
-            self.config
-        )
+        configured_provider = self.config.agents.defaults.provider
 
-    async def run(self, message: str, session_id: str | None = None) -> dict[str, Any]:
+        # If a specific provider is configured (not empty), try to use it
+        if configured_provider and configured_provider != "custom":
+            return registry.get_provider(configured_provider, self.config)
+
+        # Auto-select: find first enabled provider with API key
+        providers_config = self.config.providers
+
+        for provider_name in self.PROVIDER_PRIORITY:
+            provider_config = self._get_provider_config(provider_name)
+            if provider_config and provider_config.enabled and provider_config.api_key:
+                print(f"Auto-selected provider: {provider_name}")
+                return registry.get_provider(provider_name, self.config)
+
+        # Fallback: use the configured one even if not enabled, or default to openrouter
+        if configured_provider:
+            return registry.get_provider(configured_provider, self.config)
+
+        return registry.get_provider("openrouter", self.config)
+
+    def _get_provider_config(self, name: str) -> Any:
+        """Get provider configuration by name.
+
+        Args:
+            name: Provider name
+
+        Returns:
+            Provider configuration or None
+        """
+        providers = self.config.providers
+
+        if name == "openrouter":
+            return providers.openrouter
+        elif name == "anthropic":
+            return providers.anthropic
+        elif name == "openai":
+            return providers.openai
+        elif name == "deepseek":
+            return providers.deepseek
+        elif name == "groq":
+            return providers.groq
+        elif name == "gemini":
+            return providers.gemini
+        elif name == "custom":
+            return providers.custom
+
+        return None
+
+    async def run(
+        self,
+        message: str,
+        session_id: str | None = None,
+        on_progress: ProgressCallback | None = None
+    ) -> dict[str, Any]:
         """Run the agent loop.
 
         Args:
             message: User message
             session_id: Optional session ID for memory
+            on_progress: Optional callback for progress updates (content, is_tool_hint)
 
         Returns:
             Response dictionary
         """
         self.iteration_count = 0
         logs: list[str] = []
+        tools_used: list[str] = []
 
         # Load conversation history
         history = []
@@ -69,20 +139,34 @@ class AgentLoop:
             self.iteration_count += 1
             logs.append(f"Iteration {self.iteration_count}")
 
+            # Notify progress - iteration start
+            if on_progress:
+                await on_progress(f"Iteration {self.iteration_count}/{self.max_iterations}", False)
+
             # Call LLM
             response = await self.provider.complete(messages)
 
+            # Get assistant's content (thinking/reasoning)
+            assistant_content = response.get("content", "")
+
             # Check if response contains tool calls
             if tool_calls := response.get("tool_calls"):
-                logs.append(f"Tool calls: {[tc['name'] for tc in tool_calls]}")
+                tool_names = [tc['name'] for tc in tool_calls]
+                logs.append(f"Tool calls: {tool_names}")
+                tools_used.extend(tool_names)
 
-                # Execute tools
-                tool_results = await self._execute_tools(tool_calls)
+                # Notify progress - assistant's thinking/reasoning (not tool execution)
+                # Send the assistant's natural language response to user
+                if on_progress and assistant_content.strip():
+                    await on_progress(assistant_content.strip(), False)
+
+                # Execute tools (internal, don't send to user)
+                tool_results = await self._execute_tools(tool_calls, on_progress)
 
                 # Add to messages
                 messages.append({
                     "role": "assistant",
-                    "content": response.get("content", ""),
+                    "content": assistant_content,
                     "tool_calls": tool_calls
                 })
 
@@ -96,17 +180,52 @@ class AgentLoop:
                 # Final response
                 content = response.get("content", "")
 
-                # Save to memory
+                # Save to memory - only keep user/assistant pairs, skip tool messages
                 if session_id:
-                    await self.memory.save_history(session_id, messages + [{
-                        "role": "assistant",
-                        "content": content
-                    }])
+                    # Extract only user and final assistant messages
+                    history_to_save = []
+                    for msg in messages:
+                        role = msg.get("role", "")
+                        msg_content = msg.get("content", "")
+                        tool_calls = msg.get("tool_calls")
+
+                        # Skip system messages
+                        if role == "system":
+                            continue
+
+                        # Skip tool messages
+                        if role == "tool":
+                            continue
+
+                        # Skip assistant messages that only have tool_calls (no content)
+                        if role == "assistant" and tool_calls and not msg_content:
+                            continue
+
+                        # Skip empty assistant messages (no content and no tool_calls)
+                        if role == "assistant" and not msg_content:
+                            continue
+
+                        # Keep user messages and assistant messages with content
+                        if role in ("user", "assistant"):
+                            history_to_save.append({
+                                "role": role,
+                                "content": msg_content
+                            })
+
+                    # Add final assistant response (only if not empty)
+                    if content:
+                        history_to_save.append({
+                            "role": "assistant",
+                            "content": content
+                        })
+
+                    await self.memory.save_history(session_id, history_to_save)
 
                 return {
                     "content": content,
-                    "logs": logs if self.config.agents.defaults.model == "debug" else [],
-                    "iterations": self.iteration_count
+                    "logs": logs,
+                    "iterations": self.iteration_count,
+                    "tools_used": tools_used
                 }
 
         # Max iterations reached
@@ -114,6 +233,7 @@ class AgentLoop:
             "content": "I apologize, but I reached the maximum number of iterations. Please try a simpler request.",
             "logs": logs,
             "iterations": self.iteration_count,
+            "tools_used": tools_used,
             "error": "max_iterations_reached"
         }
 
@@ -149,12 +269,14 @@ class AgentLoop:
 
     async def _execute_tools(
         self,
-        tool_calls: list[dict[str, Any]]
+        tool_calls: list[dict[str, Any]],
+        on_progress: ProgressCallback | None = None
     ) -> list[dict[str, Any]]:
         """Execute tool calls.
 
         Args:
             tool_calls: List of tool call definitions
+            on_progress: Optional callback for progress updates
 
         Returns:
             List of tool results
@@ -166,16 +288,82 @@ class AgentLoop:
             arguments = tool_call.get("arguments", {})
             tool_call_id = tool_call.get("id", "")
 
+            # Notify progress - tool execution start
+            if on_progress:
+                args_str = self._format_arguments(arguments)
+                await on_progress(f"Executing {name}({args_str})", True)
+
             try:
                 result = await self.tools.execute(name, arguments)
                 results.append({
                     "tool_call_id": tool_call_id,
                     "content": str(result)
                 })
+
+                # Notify progress - tool execution complete
+                if on_progress:
+                    result_preview = str(result)[:100] if result else "Done"
+                    if len(str(result)) > 100:
+                        result_preview += "..."
+                    await on_progress(f"✓ {name} completed: {result_preview}", True)
+
             except Exception as e:
+                error_msg = str(e)
                 results.append({
                     "tool_call_id": tool_call_id,
-                    "content": f"Error: {e}"
+                    "content": f"Error: {error_msg}"
                 })
 
+                # Notify progress - tool execution failed
+                if on_progress:
+                    await on_progress(f"✗ {name} failed: {error_msg}", True)
+
         return results
+
+    @staticmethod
+    def _format_tool_hint(tool_calls: list[dict[str, Any]]) -> str:
+        """Format tool calls as a concise hint.
+
+        Args:
+            tool_calls: List of tool call definitions
+
+        Returns:
+            Formatted hint string
+        """
+        hints = []
+        for tc in tool_calls:
+            name = tc.get("name", "")
+            args = tc.get("arguments", {})
+            if args:
+                # Get first argument value for display
+                first_val = next(iter(args.values()), None)
+                if isinstance(first_val, str):
+                    val_str = first_val[:40] + "..." if len(first_val) > 40 else first_val
+                    hints.append(f'{name}("{val_str}")')
+                else:
+                    hints.append(name)
+            else:
+                hints.append(name)
+        return ", ".join(hints)
+
+    @staticmethod
+    def _format_arguments(arguments: dict[str, Any]) -> str:
+        """Format arguments for display.
+
+        Args:
+            arguments: Tool arguments
+
+        Returns:
+            Formatted string
+        """
+        if not arguments:
+            return ""
+
+        parts = []
+        for key, value in arguments.items():
+            val_str = str(value)
+            if len(val_str) > 30:
+                val_str = val_str[:27] + "..."
+            parts.append(f"{key}={val_str}")
+
+        return ", ".join(parts)

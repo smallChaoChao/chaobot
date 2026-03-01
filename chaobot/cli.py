@@ -62,8 +62,8 @@ def run(message: str | None, no_markdown: bool, logs: bool, no_stream: bool, ses
 
 
 @cli.command()
-def gateway() -> None:
-    """Start the gateway (connects to enabled channels)."""
+def server() -> None:
+    """Start the server (connects to enabled channels)."""
     from chaobot.gateway.server import GatewayServer
 
     server = GatewayServer()
@@ -121,6 +121,137 @@ def channels_status() -> None:
     """Show channel status."""
     console.print("Channel status...")
     # TODO: Implement channel status
+
+
+@cli.command(name="config")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", default=8080, help="Port to listen on")
+@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
+def config_ui(host: str, port: int, no_browser: bool) -> None:
+    """Launch dashboard-based configuration UI."""
+    import webbrowser
+    from chaobot.dashboard.app import create_app
+
+    app = create_app()
+    url = f"http://{host}:{port}"
+
+    console.print(Panel.fit(
+        f"🌐 Configuration UI starting...\n\n"
+        f"URL: {url}\n\n"
+        f"Use this web interface to:\n"
+        f"  • Switch between AI models\n"
+        f"  • Configure API keys\n"
+        f"  • Set up message channels\n"
+        f"  • Edit raw JSON config\n\n"
+        f"Press Ctrl+C to stop",
+        title="🤖 chaobot Config",
+        border_style="green"
+    ))
+
+    if not no_browser:
+        # Open browser after a short delay
+        import threading
+        def open_browser():
+            import time
+            time.sleep(1.5)
+            webbrowser.open(url)
+        threading.Thread(target=open_browser, daemon=True).start()
+
+    app.run(host=host, port=port, debug=False)
+
+
+@cli.group(name="session", invoke_without_command=True)
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", default=5000, help="Port to bind to")
+@click.pass_context
+def session_group(ctx, host: str, port: int) -> None:
+    """Manage conversation sessions.
+    
+    Without subcommand: Start web UI for session management.
+    With subcommand: Execute specific session command.
+    """
+    if ctx.invoked_subcommand is None:
+        # Start web UI by default
+        try:
+            from chaobot.dashboard.session_manager import run_manager
+            run_manager(host=host, port=port)
+        except ImportError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            console.print("[yellow]Please install required dependencies:[/yellow]")
+            console.print("  pip install flask")
+
+
+@session_group.command(name="list")
+def session_list() -> None:
+    """List all conversation sessions."""
+    import asyncio
+    from chaobot.config.manager import ConfigManager
+    from chaobot.agent.memory import MemoryManager
+
+    config = ConfigManager().load()
+    memory = MemoryManager(config)
+    sessions = memory.get_all_sessions()
+
+    if not sessions:
+        console.print("No sessions found")
+        return
+
+    console.print(Panel.fit(
+        "\n".join(f"  • {s}" for s in sorted(sessions)),
+        title="📝 Sessions",
+        border_style="blue"
+    ))
+
+
+@session_group.command(name="clear")
+@click.argument("session_id", required=False)
+@click.option("--all", "clear_all", is_flag=True, help="Clear all sessions")
+def session_clear(session_id: str | None, clear_all: bool) -> None:
+    """Clear conversation history for a session.
+
+    Examples:
+        chaobot session clear              # Clear default session
+        chaobot session clear mysession    # Clear specific session
+        chaobot session clear --all        # Clear all sessions
+    """
+    import asyncio
+    from chaobot.config.manager import ConfigManager
+    from chaobot.agent.memory import MemoryManager
+
+    config = ConfigManager().load()
+    memory = MemoryManager(config)
+
+    if clear_all:
+        sessions = memory.get_all_sessions()
+        for sid in sessions:
+            asyncio.run(memory.clear_history(sid))
+        console.print(f"✅ Cleared {len(sessions)} session(s)")
+    else:
+        sid = session_id or "default"
+        asyncio.run(memory.clear_history(sid))
+        console.print(f"✅ Cleared session: {sid}")
+
+
+@session_group.command(name="ui")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", default=5000, help="Port to bind to")
+def session_ui(host: str, port: int) -> None:
+    """Start web interface for session management.
+
+    Provides a web UI to view, edit, and manage conversation sessions.
+
+    Examples:
+        chaobot session                    # Start on default port 5000
+        chaobot session --port 8080        # Start on port 8080
+        chaobot session --host 0.0.0.0     # Allow external access
+    """
+    try:
+        from chaobot.dashboard.session_manager import run_manager
+        run_manager(host=host, port=port)
+    except ImportError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("[yellow]Please install required dependencies:[/yellow]")
+        console.print("  pip install flask")
 
 
 @cli.group(name="cron")

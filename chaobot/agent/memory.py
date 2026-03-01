@@ -122,12 +122,20 @@ This file stores the history of conversations.
                         # Skip metadata lines
                         if data.get("_type") == "metadata":
                             continue
-                        # Extract role and content
+                        # Extract message fields
                         if "role" in data and "content" in data:
-                            messages.append({
+                            msg: dict[str, Any] = {
                                 "role": data["role"],
                                 "content": data["content"]
-                            })
+                            }
+                            # Preserve tool call fields for API compatibility
+                            if "tool_calls" in data:
+                                msg["tool_calls"] = data["tool_calls"]
+                            if "tool_call_id" in data:
+                                msg["tool_call_id"] = data["tool_call_id"]
+                            if "name" in data:
+                                msg["name"] = data["name"]
+                            messages.append(msg)
                     except json.JSONDecodeError:
                         continue
         except IOError:
@@ -148,8 +156,15 @@ This file stores the history of conversations.
         """
         session_file = self.sessions_dir / f"{session_id}.jsonl"
 
-        # Limit history size (keep last 100 messages)
-        messages = messages[-100:]
+        # Simplify messages for storage - only keep user/assistant pairs
+        # Skip tool messages and intermediate assistant messages with tool_calls
+        simplified_messages = self._simplify_messages(messages)
+
+        # Filter out error messages
+        filtered_messages = self._filter_error_messages(simplified_messages)
+
+        # Limit history size (keep last 20 messages)
+        filtered_messages = filtered_messages[-20:]
 
         # Write as JSON Lines format (similar to nanobot)
         lines = []
@@ -160,21 +175,108 @@ This file stores the history of conversations.
             "key": f"cli:{session_id}",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "message_count": len(messages)
+            "message_count": len(filtered_messages)
         }
         lines.append(json.dumps(metadata, ensure_ascii=False))
 
         # Add message lines
-        for msg in messages:
-            line = {
+        for msg in filtered_messages:
+            line: dict[str, Any] = {
                 "role": msg.get("role", "user"),
                 "content": msg.get("content", ""),
                 "timestamp": datetime.now().isoformat()
             }
+            # Preserve tool call fields
+            if "tool_calls" in msg:
+                line["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                line["tool_call_id"] = msg["tool_call_id"]
+            if "name" in msg:
+                line["name"] = msg["name"]
             lines.append(json.dumps(line, ensure_ascii=False))
 
         with open(session_file, "w") as f:
             f.write("\n".join(lines) + "\n")
+
+    def _simplify_messages(
+        self,
+        messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Simplify messages for storage.
+
+        Keep only the final user/assistant conversation pairs,
+        skipping tool calls and intermediate steps.
+
+        Args:
+            messages: Raw messages
+
+        Returns:
+            Simplified messages
+        """
+        simplified = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
+
+            # Skip system messages
+            if role == "system":
+                continue
+
+            # Skip tool messages - they're intermediate steps
+            if role == "tool":
+                continue
+
+            # Skip assistant messages that only contain tool_calls (no content)
+            # These are intermediate steps before tool execution
+            if role == "assistant" and tool_calls and not content:
+                continue
+
+            # Keep user messages and final assistant responses
+            if role in ("user", "assistant"):
+                # For assistant messages, don't save tool_calls to history
+                # They'll be reconstructed from context if needed
+                clean_msg: dict[str, Any] = {
+                    "role": role,
+                    "content": content
+                }
+                simplified.append(clean_msg)
+
+        return simplified
+
+    def _filter_error_messages(
+        self,
+        messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Filter out error messages that shouldn't be saved to history.
+
+        Args:
+            messages: List of messages
+
+        Returns:
+            Filtered list of messages
+        """
+        filtered = []
+        for msg in messages:
+            content = msg.get("content", "")
+            role = msg.get("role", "")
+
+            # Skip error messages from assistant
+            if role == "assistant" and content:
+                # Skip HTTP error responses
+                if content.startswith("HTTP error"):
+                    continue
+                # Skip "No API key configured" errors
+                if content.startswith("Error: No API key configured"):
+                    continue
+                # Skip generic error prefix
+                if content.startswith("Error: ") and len(content) < 200:
+                    continue
+
+            filtered.append(msg)
+
+        return filtered
 
     async def clear_history(self, session_id: str) -> None:
         """Clear conversation history for a session.
