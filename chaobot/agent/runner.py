@@ -123,12 +123,22 @@ class AgentRunner:
             # First, try streaming
             async for chunk in self.loop.run_stream(message, session_id=self.session_id):
                 if chunk:
-                    # Check for tool call indicators in the stream
-                    if "<tool>" in chunk or "<function=" in chunk:
-                        has_tool_calls = True
-                        break
-                    console.print(chunk, end="")
                     full_content += chunk
+                    # Check for various tool call indicators in the stream
+                    tool_indicators = [
+                        "<tool>",
+                        "<function=",
+                        "```tool_call",
+                        "```tool",
+                        "<file_read>",
+                        "<shell>",
+                        "<web_search>",
+                    ]
+                    if any(indicator in chunk for indicator in tool_indicators):
+                        has_tool_calls = True
+
+                    if not has_tool_calls:
+                        console.print(chunk, end="")
 
             if has_tool_calls:
                 # Fall back to non-streaming mode for tool calls

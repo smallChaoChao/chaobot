@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from typing import Any, AsyncIterator
 
 import litellm
@@ -105,6 +106,38 @@ class LiteLLMProvider(BaseProvider):
         else:
             return f"openai/{model}"
 
+    def _supports_native_tool_calling(self) -> bool:
+        """Check if the model supports native tool calling.
+
+        Returns:
+            True if native tool calling is supported
+        """
+        model = self.model.lower()
+
+        # Models that support native function calling
+        native_support = [
+            "gpt-4", "gpt-3.5-turbo", "gpt-4o",
+            "claude-3", "claude-2",
+            "deepseek",
+            "gemini",
+        ]
+
+        # Models that DON'T support native function calling (need text parsing)
+        no_native_support = [
+            "qwen", "qwen2", "qwen3",
+            "llama", "mistral", "mixtral",
+        ]
+
+        for pattern in no_native_support:
+            if pattern in model:
+                return False
+
+        for pattern in native_support:
+            if pattern in model:
+                return True
+
+        return False
+
     async def complete(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """Complete a conversation using LiteLLM.
 
@@ -127,8 +160,9 @@ class LiteLLMProvider(BaseProvider):
             if self.config.agents.defaults.max_tokens:
                 kwargs["max_tokens"] = self.config.agents.defaults.max_tokens
 
+            # Only pass tools if model supports native function calling
             tools = self._extract_tools(messages)
-            if tools:
+            if tools and self._supports_native_tool_calling():
                 kwargs["tools"] = tools
                 kwargs["tool_choice"] = "auto"
 
@@ -261,6 +295,7 @@ class LiteLLMProvider(BaseProvider):
         content = message.content or ""
         tool_calls = None
 
+        # Standard OpenAI function calling format
         if hasattr(message, "tool_calls") and message.tool_calls:
             tool_calls = []
             for tc in message.tool_calls:
@@ -276,30 +311,45 @@ class LiteLLMProvider(BaseProvider):
                     "arguments": args
                 })
 
-        elif content and self._has_xml_tool_call(content):
-            tool_calls = self._parse_xml_tool_calls(content)
+        # Fallback: parse tool calls from text content (for models without native function calling)
+        elif content and self._has_tool_call_in_content(content):
+            tool_calls = self._parse_tool_calls_from_content(content)
             if tool_calls:
-                content = self._remove_xml_tool_calls(content)
+                content = self._remove_tool_calls_from_content(content)
 
         return {
             "content": content or "",
             "tool_calls": tool_calls
         }
 
-    def _has_xml_tool_call(self, content: str) -> bool:
-        """Check if content contains XML-style tool calls.
+    def _has_tool_call_in_content(self, content: str) -> bool:
+        """Check if content contains tool calls in any format.
+
+        Supports:
+        - XML format: <tool>, <function=>, <file_read>, etc.
+        - Markdown format: ```tool_call
 
         Args:
             content: Response content
 
         Returns:
-            True if XML tool calls detected
+            True if tool calls detected
         """
         xml_patterns = ["<tool>", "<function=", "<file_read>", "<shell>", "<web_search>"]
-        return any(pattern in content for pattern in xml_patterns)
+        if any(pattern in content for pattern in xml_patterns):
+            return True
+        if "```tool_call" in content:
+            return True
+        return False
 
-    def _parse_xml_tool_calls(self, content: str) -> list[dict[str, Any]] | None:
-        """Parse XML-style tool calls from content.
+    def _parse_tool_calls_from_content(self, content: str) -> list[dict[str, Any]] | None:
+        """Parse tool calls from text content.
+
+        Supports multiple formats:
+        1. XML: <tool><name>xxx</name>...</tool>
+        2. XML: <function=xxx>...</function>
+        3. XML: <file_read>path</file_read>
+        4. Markdown: ```tool_call\\ntool_name\\n```
 
         Args:
             content: Response content
@@ -307,61 +357,90 @@ class LiteLLMProvider(BaseProvider):
         Returns:
             List of tool calls or None
         """
-        import re
         tool_calls = []
 
-        pattern1 = r'<tool>\s*<name>(\w+)</name>\s*(.*?)</tool>'
-        matches1 = re.findall(pattern1, content, re.DOTALL)
-        for name, params_xml in matches1:
+        # Try markdown format first (qwen uses this)
+        md_pattern = r"```tool_call\s*\n\s*(\w+)(?:\s+([^\n]+))?\s*\n"
+        md_matches = re.findall(md_pattern, content, re.DOTALL)
+        for match in md_matches:
+            tool_name = match[0].strip()
+            args = {}
+            # Parse arguments if present (format: key1=value1 key2=value2)
+            if match[1]:
+                arg_str = match[1].strip()
+                # Try key=value format
+                for part in arg_str.split():
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        args[k.strip()] = v.strip()
+            tool_calls.append({
+                "id": f"call_{hash(tool_name + str(args)) & 0xFFFFFFFF}",
+                "name": tool_name,
+                "arguments": args
+            })
+
+        if tool_calls:
+            return tool_calls
+
+        # Try XML format: <tool><name>xxx</name>...</tool>
+        xml_pattern1 = r'<tool>\s*<name>(\w+)</name>\s*(.*?)</tool>'
+        xml_matches1 = re.findall(xml_pattern1, content, re.DOTALL)
+        for name, params_xml in xml_matches1:
             args = {}
             param_pattern = r'<parameter=(\w+)>(.*?)</parameter>'
             for param_name, param_value in re.findall(param_pattern, params_xml, re.DOTALL):
                 args[param_name] = param_value.strip()
-            if args:
-                tool_calls.append({
-                    "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
-                    "name": name,
-                    "arguments": args
-                })
+            tool_calls.append({
+                "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
+                "name": name,
+                "arguments": args
+            })
 
-        if not tool_calls:
-            pattern2 = r'<function=(\w+)>\s*(.*?)</function>'
-            matches2 = re.findall(pattern2, content, re.DOTALL)
-            for name, params_xml in matches2:
-                args = {}
-                param_pattern = r'<parameter=(\w+)>(.*?)</parameter>'
-                for param_name, param_value in re.findall(param_pattern, params_xml, re.DOTALL):
-                    args[param_name] = param_value.strip()
-                if args:
-                    tool_calls.append({
-                        "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
-                        "name": name,
-                        "arguments": args
-                    })
+        if tool_calls:
+            return tool_calls
 
-        if not tool_calls:
-            pattern3 = r'<(file_read|shell|web_search|web_fetch)>([^<]+)</\1>'
-            matches3 = re.findall(pattern3, content, re.DOTALL)
-            for name, arg_value in matches3:
-                arg_key = "path" if name == "file_read" else "command" if name == "shell" else "query" if name == "web_search" else "url"
-                tool_calls.append({
-                    "id": f"call_{hash(name + arg_value) & 0xFFFFFFFF}",
-                    "name": name,
-                    "arguments": {arg_key: arg_value.strip()}
-                })
+        # Try XML format: <function=xxx>...</function>
+        xml_pattern2 = r'<function=(\w+)>\s*(.*?)</function>'
+        xml_matches2 = re.findall(xml_pattern2, content, re.DOTALL)
+        for name, params_xml in xml_matches2:
+            args = {}
+            param_pattern = r'<parameter=(\w+)>(.*?)</parameter>'
+            for param_name, param_value in re.findall(param_pattern, params_xml, re.DOTALL):
+                args[param_name] = param_value.strip()
+            tool_calls.append({
+                "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
+                "name": name,
+                "arguments": args
+            })
+
+        if tool_calls:
+            return tool_calls
+
+        # Try simple XML format: <file_read>path</file_read>
+        xml_pattern3 = r'<(file_read|shell|web_search|web_fetch)>([^<]+)</\1>'
+        xml_matches3 = re.findall(xml_pattern3, content, re.DOTALL)
+        for name, arg_value in xml_matches3:
+            arg_key = "path" if name == "file_read" else "command" if name == "shell" else "query" if name == "web_search" else "url"
+            tool_calls.append({
+                "id": f"call_{hash(name + arg_value) & 0xFFFFFFFF}",
+                "name": name,
+                "arguments": {arg_key: arg_value.strip()}
+            })
 
         return tool_calls if tool_calls else None
 
-    def _remove_xml_tool_calls(self, content: str) -> str:
-        """Remove XML tool calls from content.
+    def _remove_tool_calls_from_content(self, content: str) -> str:
+        """Remove tool calls from content.
 
         Args:
             content: Original content
 
         Returns:
-            Content with XML tool calls removed
+            Content with tool calls removed
         """
-        import re
+        # Remove markdown format
+        content = re.sub(r'```tool_call\s*\n.*?```', '', content, flags=re.DOTALL)
+        # Remove XML format
         content = re.sub(r'<tool>.*?</tool>', '', content, flags=re.DOTALL)
         content = re.sub(r'<function=.*?</function>', '', content, flags=re.DOTALL)
         content = re.sub(r'<(file_read|shell|web_search|web_fetch)>.*?</\1>', '', content, flags=re.DOTALL)
