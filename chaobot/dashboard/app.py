@@ -115,41 +115,34 @@ def create_app() -> Flask:
 
     @app.route("/api/models", methods=["GET"])
     def get_models():
-        """Get list of recommended models in LiteLLM format."""
+        """Get list of recommended models in LiteLLM format.
+        
+        Note: LiteLLM supports 100+ providers. Users can use any model
+        in the format: provider/model (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet")
+        See: https://docs.litellm.ai/docs/providers
+        """
         models = [
-            # OpenRouter models (prefix: openrouter/)
-            {"id": "openrouter/anthropic/claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/anthropic/claude-3-opus-20240229", "name": "Claude 3 Opus (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/openai/gpt-4o", "name": "GPT-4o (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/openai/gpt-4o-mini", "name": "GPT-4o Mini (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/deepseek/deepseek-chat", "name": "DeepSeek Chat (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/google/gemini-pro", "name": "Gemini Pro (OpenRouter)", "provider": "openrouter"},
-            {"id": "openrouter/meta-llama/llama-3.1-70b-instruct", "name": "Llama 3.1 70B (OpenRouter)", "provider": "openrouter"},
-            # Anthropic direct (prefix: anthropic/)
-            {"id": "anthropic/claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "provider": "anthropic"},
-            {"id": "anthropic/claude-3-opus-20240229", "name": "Claude 3 Opus", "provider": "anthropic"},
-            {"id": "anthropic/claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "provider": "anthropic"},
-            # OpenAI direct (prefix: openai/)
-            {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openai"},
-            {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini", "provider": "openai"},
-            {"id": "openai/gpt-4-turbo", "name": "GPT-4 Turbo", "provider": "openai"},
-            {"id": "openai/o1-preview", "name": "o1 Preview", "provider": "openai"},
-            {"id": "openai/o1-mini", "name": "o1 Mini", "provider": "openai"},
-            # DeepSeek direct (prefix: deepseek/)
-            {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat", "provider": "deepseek"},
-            {"id": "deepseek/deepseek-coder", "name": "DeepSeek Coder", "provider": "deepseek"},
-            # Groq (prefix: groq/)
-            {"id": "groq/llama-3.1-70b-versatile", "name": "Llama 3.1 70B (Groq)", "provider": "groq"},
-            {"id": "groq/mixtral-8x7b-32768", "name": "Mixtral 8x7B (Groq)", "provider": "groq"},
-            # Gemini (prefix: gemini/)
-            {"id": "gemini/gemini-pro", "name": "Gemini Pro", "provider": "gemini"},
-            {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro", "provider": "gemini"},
-            {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash", "provider": "gemini"},
-            # Custom (for Aliyun DashScope, etc.)
-            {"id": "openai/qwen-max", "name": "Qwen Max (Custom)", "provider": "custom"},
-            {"id": "openai/qwen-plus", "name": "Qwen Plus (Custom)", "provider": "custom"},
-            {"id": "openai/qwen-turbo", "name": "Qwen Turbo (Custom)", "provider": "custom"},
-            {"id": "openai/qwen3.5-plus", "name": "Qwen 3.5 Plus (Custom)", "provider": "custom"},
+            # Popular models - Anthropic
+            {"id": "anthropic/claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+            {"id": "anthropic/claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku"},
+            # Popular models - OpenAI
+            {"id": "openai/gpt-4o", "name": "GPT-4o"},
+            {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini"},
+            {"id": "openai/o1-preview", "name": "o1 Preview"},
+            # Popular models - DeepSeek
+            {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat"},
+            {"id": "deepseek/deepseek-coder", "name": "DeepSeek Coder"},
+            # Popular models - Groq (fast inference)
+            {"id": "groq/llama-3.1-70b-versatile", "name": "Llama 3.1 70B (Groq)"},
+            # Popular models - Gemini
+            {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+            {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
+            # OpenRouter (multi-provider gateway)
+            {"id": "openrouter/anthropic/claude-3-5-sonnet", "name": "Claude 3.5 Sonnet (OpenRouter)"},
+            {"id": "openrouter/openai/gpt-4o", "name": "GPT-4o (OpenRouter)"},
+            # Custom endpoints (Aliyun DashScope, etc.)
+            {"id": "openai/qwen-max", "name": "Qwen Max (Custom)"},
+            {"id": "openai/qwen3.5-plus", "name": "Qwen 3.5 Plus (Custom)"},
         ]
         return jsonify({"success": True, "data": models})
 
