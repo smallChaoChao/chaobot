@@ -100,8 +100,30 @@ class AgentRunner:
         Args:
             message: Message to send
         """
-        # Always use non-streaming mode for reliable tool support
-        asyncio.run(self._run_single_with_progress(message))
+        if self.stream:
+            asyncio.run(self._run_single_stream(message))
+        else:
+            asyncio.run(self._run_single_with_progress(message))
+
+    async def _run_single_stream(self, message: str) -> None:
+        """Run a single message with streaming output.
+
+        Args:
+            message: Message to send
+        """
+        console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
+
+        full_content = ""
+        try:
+            async for chunk in self.loop.run_stream(message, session_id=self.session_id):
+                if chunk:
+                    console.print(chunk, end="")
+                    full_content += chunk
+
+            console.print()  # New line after streaming
+
+        except Exception as e:
+            console.print(f"\n[bold red]Error: {e}[/bold red]")
 
     async def _run_single_with_progress(self, message: str) -> None:
         """Run a single message with progress tracking.
@@ -183,12 +205,35 @@ class AgentRunner:
                     console.print("Goodbye! 👋")
                     break
 
-                # Always use non-streaming mode for reliable tool support
-                asyncio.run(self._run_interactive_with_progress(user_input))
+                # Use streaming or non-streaming based on config
+                if self.stream:
+                    asyncio.run(self._run_interactive_stream(user_input))
+                else:
+                    asyncio.run(self._run_interactive_with_progress(user_input))
 
             except (EOFError, KeyboardInterrupt):
                 console.print("\nGoodbye! 👋")
                 break
+
+    async def _run_interactive_stream(self, message: str) -> None:
+        """Run interactive message with streaming output.
+
+        Args:
+            message: User message
+        """
+        console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
+
+        full_content = ""
+        try:
+            async for chunk in self.loop.run_stream(message, session_id=self.session_id):
+                if chunk:
+                    console.print(chunk, end="")
+                    full_content += chunk
+
+            console.print()  # New line after streaming
+
+        except Exception as e:
+            console.print(f"\n[bold red]Error: {e}[/bold red]")
 
     async def _run_interactive_with_progress(self, message: str) -> None:
         """Run interactive message with progress tracking.
