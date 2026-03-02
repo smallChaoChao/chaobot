@@ -1,6 +1,6 @@
 """Entry point for python -m chaobot."""
 
-from chaobot.cli import main
+from chaobot.cli import app
 
 if __name__ == "__main__":
-    main()
+    app()
