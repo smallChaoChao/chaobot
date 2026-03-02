@@ -44,36 +44,20 @@ class AgentLoop:
         self.max_iterations = config.agents.max_iterations
 
     def _get_provider(self) -> BaseProvider:
-        """Get the configured LLM provider.
+        """Get the configured LLM provider using LiteLLM.
 
-        If a specific provider is configured in agents.defaults.provider,
-        use that one. Otherwise, auto-select the first enabled provider
-        based on priority order.
+        LiteLLM automatically detects the provider from the model name.
+        The model name should be in format: "provider/model" (e.g., "openai/gpt-4o")
 
         Returns:
             Provider instance
         """
         registry = ProviderRegistry()
-        configured_provider = self.config.agents.defaults.provider
+        model = self.config.agents.defaults.model
 
-        # If a specific provider is configured (not empty), try to use it
-        if configured_provider and configured_provider != "custom":
-            return registry.get_provider(configured_provider, self.config)
+        print(f"Using model: {model}")
 
-        # Auto-select: find first enabled provider with API key
-        providers_config = self.config.providers
-
-        for provider_name in self.PROVIDER_PRIORITY:
-            provider_config = self._get_provider_config(provider_name)
-            if provider_config and provider_config.enabled and provider_config.api_key:
-                print(f"Auto-selected provider: {provider_name}")
-                return registry.get_provider(provider_name, self.config)
-
-        # Fallback: use the configured one even if not enabled, or default to openrouter
-        if configured_provider:
-            return registry.get_provider(configured_provider, self.config)
-
-        return registry.get_provider("openrouter", self.config)
+        return registry.get_provider_for_model(model, self.config)
 
     def _get_provider_config(self, name: str) -> Any:
         """Get provider configuration by name.

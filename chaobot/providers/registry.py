@@ -59,10 +59,10 @@ class ProviderRegistry:
         self._providers: dict[str, BaseProvider] = {}
 
     def get_provider(self, name: str, config: Config) -> BaseProvider:
-        """Get a provider instance.
+        """Get a provider instance using LiteLLM.
 
         Args:
-            name: Provider name
+            name: Provider name (deprecated, kept for compatibility)
             config: Application configuration
 
         Returns:
@@ -71,15 +71,53 @@ class ProviderRegistry:
         Raises:
             ValueError: If provider not found
         """
-        if name not in self.PROVIDERS:
-            raise ValueError(f"Unknown provider: {name}")
+        provider_config = self._get_provider_config(name, config) if name else ProviderConfig()
+        model = config.agents.defaults.model
 
-        spec = self.PROVIDERS[name]
-        provider_config = self._get_provider_config(name, config)
+        from chaobot.providers.litellm_provider import LiteLLMProvider
+        return LiteLLMProvider(config, provider_config, model)
 
-        # Use OpenAI-compatible provider for most providers
-        from chaobot.providers.openai_compatible import OpenAICompatibleProvider
-        return OpenAICompatibleProvider(config, provider_config, spec)
+    def get_provider_for_model(self, model: str, config: Config) -> BaseProvider:
+        """Get a provider instance for a specific model.
+
+        Args:
+            model: Model name in LiteLLM format (e.g., "openai/gpt-4o")
+            config: Application configuration
+
+        Returns:
+            Provider instance
+        """
+        provider_name = self._get_provider_name_from_model(model)
+        provider_config = self._get_provider_config(provider_name, config)
+
+        from chaobot.providers.litellm_provider import LiteLLMProvider
+        return LiteLLMProvider(config, provider_config, model)
+
+    def _get_provider_name_from_model(self, model: str) -> str:
+        """Extract provider name from model string.
+
+        Args:
+            model: Model name (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet")
+
+        Returns:
+            Provider name
+        """
+        if model.startswith("openrouter/"):
+            return "openrouter"
+        elif model.startswith("anthropic/") or model.startswith("claude"):
+            return "anthropic"
+        elif model.startswith("openai/"):
+            return "openai"
+        elif model.startswith("deepseek/"):
+            return "deepseek"
+        elif model.startswith("groq/"):
+            return "groq"
+        elif model.startswith("gemini/"):
+            return "gemini"
+        elif model.startswith("qwen") or model.startswith("qwen3"):
+            return "custom"
+        else:
+            return "custom"
 
     def _get_provider_config(self, name: str, config: Config) -> ProviderConfig:
         """Get provider configuration.

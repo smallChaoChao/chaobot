@@ -35,7 +35,7 @@ class ProvidersConfig(BaseModel):
 class AgentDefaultsConfig(BaseModel):
     """Default agent settings."""
 
-    model: str = "anthropic/claude-3-5-sonnet-20241022"
+    model: str = "openrouter/anthropic/claude-3-5-sonnet-20241022"
     provider: str = "openrouter"
     temperature: float = 0.7
     max_tokens: int | None = None
