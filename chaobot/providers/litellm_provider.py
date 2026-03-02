@@ -3,15 +3,19 @@
 import json
 import os
 import re
+import logging
 from typing import Any, AsyncIterator
 
 import litellm
 from litellm import acompletion
 
-# Configure litellm to avoid RuntimeWarning
+# Configure litellm to avoid warnings
 litellm.success_callback = []
 litellm.failure_callback = []
 litellm.callbacks = []
+
+# Suppress litellm info/warning logs
+logging.getLogger("litellm").setLevel(logging.ERROR)
 
 from chaobot.providers.base import BaseProvider
 
@@ -407,6 +411,27 @@ class LiteLLMProvider(BaseProvider):
                     "name": tool_name.strip(),
                     "arguments": {}
                 })
+
+        if tool_calls:
+            return tool_calls
+
+        # Try XML format: <tool><tool_name>xxx</tool_name><param>value</param></tool>
+        # This is the format Qwen actually outputs
+        xml_pattern0 = r'<tool>\s*<tool_name>(\w+)</tool_name>\s*(.*?)</tool>'
+        xml_matches0 = re.findall(xml_pattern0, content, re.DOTALL)
+        for name, params_xml in xml_matches0:
+            args = {}
+            # Parse various parameter formats
+            # <path>value</path>
+            param_pattern1 = r'<(\w+)>([^<]*)</\1>'
+            for param_name, param_value in re.findall(param_pattern1, params_xml, re.DOTALL):
+                if param_name != "tool_name":
+                    args[param_name] = param_value.strip()
+            tool_calls.append({
+                "id": f"call_{hash(name + str(args)) & 0xFFFFFFFF}",
+                "name": name,
+                "arguments": args
+            })
 
         if tool_calls:
             return tool_calls

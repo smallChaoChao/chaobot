@@ -121,11 +121,18 @@ def run(
 
 
 @app.command()
-def server() -> None:
+def server(
+    logs: bool = typer.Option(
+        False,
+        "--logs",
+        "-l",
+        help="Show tool execution logs",
+    ),
+) -> None:
     """Start the server (connects to enabled channels)."""
     from chaobot.gateway.server import GatewayServer
 
-    gateway = GatewayServer()
+    gateway = GatewayServer(show_logs=logs)
     gateway.start()
 
 

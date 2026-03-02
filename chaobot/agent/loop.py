@@ -55,8 +55,6 @@ class AgentLoop:
         registry = ProviderRegistry()
         model = self.config.agents.defaults.model
 
-        print(f"Using model: {model}")
-
         return registry.get_provider_for_model(model, self.config)
 
     def _get_provider_config(self, name: str) -> Any:

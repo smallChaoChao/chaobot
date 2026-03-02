@@ -108,12 +108,20 @@ class AgentRunner:
     async def _run_single_stream(self, message: str) -> None:
         """Run a single message with streaming output.
 
-        Note: Streaming mode doesn't support tool calls well.
-        If tool calls are detected, it will fall back to non-streaming mode.
+        Note: For models without native function calling support (like Qwen),
+        we use non-streaming mode to properly handle tool calls.
 
         Args:
             message: Message to send
         """
+        # Check if model supports native tool calling
+        from chaobot.providers.litellm_provider import LiteLLMProvider
+        if isinstance(self.loop.provider, LiteLLMProvider):
+            if not self.loop.provider._supports_native_tool_calling():
+                # Use non-streaming mode for models without native tool calling
+                await self._run_single_with_progress(message)
+                return
+
         console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
 
         full_content = ""
@@ -248,12 +256,20 @@ class AgentRunner:
     async def _run_interactive_stream(self, message: str) -> None:
         """Run interactive message with streaming output.
 
-        Note: Streaming mode doesn't support tool calls well.
-        If tool calls are detected, it will fall back to non-streaming mode.
+        Note: For models without native function calling support (like Qwen),
+        we use non-streaming mode to properly handle tool calls.
 
         Args:
             message: User message
         """
+        # Check if model supports native tool calling
+        from chaobot.providers.litellm_provider import LiteLLMProvider
+        if isinstance(self.loop.provider, LiteLLMProvider):
+            if not self.loop.provider._supports_native_tool_calling():
+                # Use non-streaming mode for models without native tool calling
+                await self._run_interactive_with_progress(message)
+                return
+
         console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
 
         full_content = ""
@@ -263,12 +279,22 @@ class AgentRunner:
             # First, try streaming
             async for chunk in self.loop.run_stream(message, session_id=self.session_id):
                 if chunk:
-                    # Check for tool call indicators in the stream
-                    if "<tool>" in chunk or "<function=" in chunk:
-                        has_tool_calls = True
-                        break
-                    console.print(chunk, end="")
                     full_content += chunk
+                    # Check for various tool call indicators in the stream
+                    tool_indicators = [
+                        "<tool>",
+                        "<function=",
+                        "```tool_call",
+                        "```tool",
+                        "<file_read>",
+                        "<shell>",
+                        "<web_search>",
+                    ]
+                    if any(indicator in chunk for indicator in tool_indicators):
+                        has_tool_calls = True
+
+                    if not has_tool_calls:
+                        console.print(chunk, end="")
 
             if has_tool_calls:
                 # Fall back to non-streaming mode for tool calls

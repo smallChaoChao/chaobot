@@ -73,7 +73,7 @@ class FeishuChannel(BaseChannel):
             self._client = lark.Client.builder() \
                 .app_id(self.app_id) \
                 .app_secret(self.app_secret) \
-                .log_level(lark.LogLevel.INFO) \
+                .log_level(lark.LogLevel.ERROR) \
                 .build()
             console.print("[green]✅ Feishu client created[/green]")
         except Exception as e:
@@ -93,7 +93,7 @@ class FeishuChannel(BaseChannel):
             self.app_id,
             self.app_secret,
             event_handler=event_handler,
-            log_level=lark.LogLevel.INFO
+            log_level=lark.LogLevel.ERROR
         )
 
         console.print("[blue]🔌 Starting Feishu WebSocket connection...[/blue]")
@@ -135,7 +135,6 @@ class FeishuChannel(BaseChannel):
             message: Message content (supports markdown-like formatting)
         """
         if not self._client:
-            console.print("[red]❌ Feishu client not initialized[/red]")
             return
 
         # Determine receive_id_type
@@ -171,13 +170,13 @@ class FeishuChannel(BaseChannel):
             )
 
             if response.success():
-                console.print(f"[green]✅ Message sent to {to}[/green]")
-            else:
-                console.print(f"[red]❌ Failed to send message: {response.msg}[/red]")
+                # Log outgoing message (session_id is the recipient)
+                session_short = to[:8] if len(to) > 8 else to
+                console.print(f"[blue]chaobot({session_short}) → {message[:50]}...[/blue]")
         except Exception as e:
-            console.print(f"[red]❌ Error sending message: {e}[/red]")
+            console.print(f"[red]❌ Send error: {e}[/red]")
 
-    def _on_message_sync(self, data: P2ImMessageReceiveV1) -> None:
+    def _on_message_sync(self, data: Any) -> None:
         """Sync handler for incoming messages (called from WebSocket thread).
 
         Args:
@@ -186,7 +185,7 @@ class FeishuChannel(BaseChannel):
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._on_message(data), self._loop)
 
-    async def _on_message(self, data: P2ImMessageReceiveV1) -> None:
+    async def _on_message(self, data: Any) -> None:
         """Handle incoming message from Feishu.
 
         Args:
@@ -197,22 +196,15 @@ class FeishuChannel(BaseChannel):
             message = event.message
             sender = event.sender
 
-            console.print(f"[dim]📨 Message type: {message.message_type}[/dim]")
-
             # Skip bot messages
             if sender.sender_type == "bot":
-                console.print("[yellow]⚠️  Skipping bot message[/yellow]")
                 return
 
             # Get sender info
             sender_id = sender.sender_id.open_id
-            sender_name = sender.sender_id.union_id or "Unknown"
-
-            console.print(f"[blue]👤 Message from: {sender_name} ({sender_id})[/blue]")
 
             # Check if sender is allowed
             if self.allow_users and sender_id not in self.allow_users:
-                console.print(f"[yellow]⚠️  Sender {sender_id} not in allowlist[/yellow]")
                 return
 
             # Parse message content
@@ -224,18 +216,23 @@ class FeishuChannel(BaseChannel):
             else:
                 text = f"[Unsupported message type: {msg_type}]"
 
-            console.print(f"[green]💬 Message: {text[:100]}...[/green]")
-
             # Get chat ID for reply
             chat_id = message.chat_id
-            console.print(f"[blue]💬 Chat ID: {chat_id}[/blue]")
+
+            # Clean text (remove bot mention)
+            import re
+            text = re.sub(r'@_user_\d+\s*', '', text).strip()
+
+            # Log incoming message (session_id is chat_id)
+            session_short = chat_id[:8] if len(chat_id) > 8 else chat_id
+            console.print(f"[green]you({session_short}) → {text}[/green]")
 
             # Send "OK" reaction emoji to acknowledge message receipt
             await self._send_reaction(chat_id, message.message_id, "OK")
 
             # Create inbound message and publish to bus
             inbound_msg = InboundMessage(
-                id=str(uuid.uuid4()),
+                id=message.message_id,
                 channel=self.name,
                 sender_id=sender_id,
                 chat_id=chat_id,
@@ -247,9 +244,7 @@ class FeishuChannel(BaseChannel):
             await bus.inbound.put(inbound_msg)
 
         except Exception as e:
-            console.print(f"[red]❌ Error processing message: {e}[/red]")
-            import traceback
-            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            console.print(f"[red]❌ Error: {e}[/red]")
 
     async def _send_reaction(self, chat_id: str, message_id: str, emoji_type: str) -> None:
         """Send a reaction emoji to a message.

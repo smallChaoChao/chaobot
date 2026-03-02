@@ -101,8 +101,6 @@ class GatewayServer:
                 # Get message from inbound queue
                 msg: InboundMessage = await bus.inbound.get()
 
-                console.print(f"[dim]→ {msg.channel}: {msg.content[:50]}...[/dim]")
-
                 # Clean message content
                 content = self._clean_content(msg.content)
 
@@ -115,7 +113,7 @@ class GatewayServer:
                         msg_id=msg.id
                     )
                 except Exception as e:
-                    console.print(f"[red]✗ Error: {e}[/red]")
+                    console.print(f"[red]❌ Error: {e}[/red]")
                     # Send error message to user
                     outbound_msg = OutboundMessage(
                         id=msg.id,
@@ -129,7 +127,7 @@ class GatewayServer:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                console.print(f"[red]✗ Error: {e}[/red]")
+                console.print(f"[red]❗ Error: {e}[/red]")
 
     async def _process_message_with_progress(
         self,
@@ -148,12 +146,13 @@ class GatewayServer:
         """
         bus = get_bus()
 
-        # Create AgentRunner with streaming disabled
+        # Create AgentRunner with streaming disabled and no confirmation prompts
         runner = AgentRunner(
             show_logs=self.show_logs,
             use_markdown=True,
             stream=False,  # Disable streaming for more reliable tool support
-            session_id=session_id
+            session_id=session_id,
+            confirm_sensitive=False  # Disable confirmation prompts in server mode
         )
 
         # Use non-streaming mode for reliable tool support
@@ -265,11 +264,21 @@ class GatewayServer:
             last_progress_content = content
 
             # Log tool execution to console (for debugging)
-            if is_tool_hint and self.show_logs:
-                if content.startswith("  ↳ "):
-                    console.print(f"[dim]{content}[/dim]")
-                else:
-                    console.print(f"  ↳ {content}")
+            if is_tool_hint:
+                if self.show_logs:
+                    # Simplified tool log format
+                    console.print(f"[cyan]  🔧 {content}[/cyan]")
+                # Also send tool hints to user if show_logs is enabled
+                if self.show_logs:
+                    progress_sent = True
+                    outbound_msg = OutboundMessage(
+                        id=f"{msg_id}_tool_{hash(content) & 0xFFFFFFFF}",
+                        channel=channel,
+                        recipient_id=session_id,
+                        content=f"🔧 {content}",
+                        reply_to=msg_id
+                    )
+                    await bus.outbound.put(outbound_msg)
 
             # Send assistant's natural language output to user (not tool hints)
             if not is_tool_hint and content.strip():

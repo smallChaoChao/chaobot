@@ -46,6 +46,18 @@ class MemoryManager:
                     f"xattr -d com.apple.quarantine {self.workspace_dir}"
                 ) from e
             raise
+        except OSError as e:
+            if e.errno == 1:
+                import platform
+                if platform.system() == "Darwin":
+                    raise PermissionError(
+                        f"Operation not permitted on: {self.memory_dir}\n"
+                        f"This is likely due to macOS sandbox restrictions.\n"
+                        f"Please run the following commands:\n"
+                        f"  mkdir -p {self.memory_dir} {self.sessions_dir}\n"
+                        f"  chmod -R u+rw {self.workspace_dir}"
+                    ) from e
+            raise
 
     def _ensure_memory_files(self) -> None:
         """Ensure MEMORY.md and HISTORY.md files exist."""
