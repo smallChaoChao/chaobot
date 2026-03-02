@@ -2,10 +2,14 @@
 
 import json
 import os
+import warnings
 from typing import Any, AsyncIterator
 
 import litellm
 from litellm import acompletion
+
+# Suppress litellm internal RuntimeWarning about unawaited coroutines
+warnings.filterwarnings("ignore", message="coroutine.*was never awaited", category=RuntimeWarning)
 
 from chaobot.providers.base import BaseProvider
 

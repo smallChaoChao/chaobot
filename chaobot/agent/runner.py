@@ -173,9 +173,8 @@ class AgentRunner:
 
         while True:
             try:
-                # Print prompt label using rich, then get input
-                console.print("[bold green]You:[/bold green] ", end="")
-                user_input = prompt.prompt(message="", multiline=False)
+                # Use ANSI color for the prompt (prompt_toolkit doesn't support rich tags)
+                user_input = prompt.prompt(message="\033[1;32mYou:\033[0m ", multiline=False)
 
                 if not user_input:
                     continue
