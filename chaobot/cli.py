@@ -1,22 +1,48 @@
-"""CLI commands for chaobot."""
+"""CLI commands for chaobot using typer."""
 
-import click
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from chaobot import __version__
 
+app = typer.Typer(
+    name="chaobot",
+    help="🤖 chaobot: A lightweight personal AI assistant",
+    no_args_is_help=True,
+)
 console = Console()
 
+LOGO = "🤖"
 
-@click.group()
-@click.version_option(version=__version__, prog_name="chaobot")
-def cli() -> None:
+
+def version_callback(value: bool) -> None:
+    if value:
+        console.print(f"{LOGO} chaobot v{__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show version and exit",
+    ),
+) -> None:
     """🤖 chaobot: A lightweight personal AI assistant."""
     pass
 
 
-@cli.command()
+@app.command()
 def init() -> None:
     """Initialize config & workspace."""
     from chaobot.config.manager import ConfigManager
@@ -25,7 +51,6 @@ def init() -> None:
     config_manager = ConfigManager()
     config_manager.initialize()
 
-    # Initialize memory system (creates MEMORY.md, HISTORY.md, and sessions dir)
     config = config_manager.load()
     MemoryManager(config)
 
@@ -38,22 +63,56 @@ def init() -> None:
         "Next steps:\n"
         "1. Edit ~/.chaobot/config.json to add your API keys\n"
         "2. Run 'chaobot run' to start chatting",
-        title="🤖 chaobot",
+        title=f"{LOGO} chaobot",
         border_style="green"
     ))
 
 
-@cli.command()
-@click.option("-m", "--message", help="Single message to send")
-@click.option("--no-markdown", is_flag=True, help="Show plain-text replies")
-@click.option("--logs", is_flag=True, help="Show runtime logs during chat")
-@click.option("--no-stream", is_flag=True, help="Disable streaming response")
-@click.option("--session", "-s", default="default", help="Session ID for conversation history")
-def run(message: str | None, no_markdown: bool, logs: bool, no_stream: bool, session: str) -> None:
-    """Chat with the agent."""
+@app.command()
+def run(
+    message: Optional[str] = typer.Argument(
+        None,
+        help="Message to send (if not provided, starts interactive mode)",
+    ),
+    no_markdown: bool = typer.Option(
+        False,
+        "--no-markdown",
+        help="Show plain-text replies",
+    ),
+    logs: bool = typer.Option(
+        False,
+        "--logs",
+        "-l",
+        help="Show runtime logs during chat",
+    ),
+    no_stream: bool = typer.Option(
+        False,
+        "--no-stream",
+        help="Disable streaming response",
+    ),
+    session: str = typer.Option(
+        "default",
+        "--session",
+        "-s",
+        help="Session ID for conversation history",
+    ),
+) -> None:
+    """Chat with the agent.
+
+    Examples:
+        chaobot run                    # Interactive mode
+        chaobot run "Hello"            # Single message
+        chaobot run -l "Hello"         # With logs
+        chaobot run -s mysession       # Use specific session
+    """
     from chaobot.agent.runner import AgentRunner
 
-    runner = AgentRunner(show_logs=logs, use_markdown=not no_markdown, stream=not no_stream, session_id=session)
+    runner = AgentRunner(
+        show_logs=logs,
+        use_markdown=not no_markdown,
+        stream=not no_stream,
+        session_id=session
+    )
 
     if message:
         runner.run_single(message)
@@ -61,16 +120,16 @@ def run(message: str | None, no_markdown: bool, logs: bool, no_stream: bool, ses
         runner.run_interactive()
 
 
-@cli.command()
+@app.command()
 def server() -> None:
     """Start the server (connects to enabled channels)."""
     from chaobot.gateway.server import GatewayServer
 
-    server = GatewayServer()
-    server.start()
+    gateway = GatewayServer()
+    gateway.start()
 
 
-@cli.command()
+@app.command()
 def status() -> None:
     """Show status."""
     from chaobot.config.manager import ConfigManager
@@ -78,61 +137,32 @@ def status() -> None:
 
     config = ConfigManager().load()
     registry = ProviderRegistry()
+    active_providers = registry.get_active_providers(config)
 
-    console.print(Panel.fit(
-        f"Version: {__version__}\n"
-        f"Config: {config.config_path}\n"
-        f"Workspace: {config.workspace_path}\n"
-        f"Active Providers: {len(registry.get_active_providers(config))}",
-        title="🤖 chaobot Status",
-        border_style="blue"
-    ))
+    table = Table(title=f"{LOGO} chaobot Status")
+    table.add_column("Property", style="cyan")
+    table.add_column("Value", style="green")
 
+    table.add_row("Version", __version__)
+    table.add_row("Config", str(config.config_path))
+    table.add_row("Workspace", str(config.workspace_path))
+    table.add_row("Active Providers", str(len(active_providers)))
+    table.add_row("Model", config.agents.defaults.model)
 
-@cli.group(name="provider")
-def provider_group() -> None:
-    """Manage LLM providers."""
-    pass
+    console.print(table)
 
 
-@provider_group.command(name="login")
-@click.argument("provider_name")
-def provider_login(provider_name: str) -> None:
-    """OAuth login for providers."""
-    console.print(f"Logging in to {provider_name}...")
-    # TODO: Implement OAuth login
-
-
-@cli.group(name="channels")
-def channels_group() -> None:
-    """Manage chat channels."""
-    pass
-
-
-@channels_group.command(name="login")
-def channels_login() -> None:
-    """Link channels (e.g., WhatsApp QR scan)."""
-    console.print("Channel login...")
-    # TODO: Implement channel login
-
-
-@channels_group.command(name="status")
-def channels_status() -> None:
-    """Show channel status."""
-    console.print("Channel status...")
-    # TODO: Implement channel status
-
-
-@cli.command(name="config")
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8080, help="Port to listen on")
-@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
-def config_ui(host: str, port: int, no_browser: bool) -> None:
+@app.command()
+def config(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to listen on"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Don't open browser"),
+) -> None:
     """Launch dashboard-based configuration UI."""
     import webbrowser
     from chaobot.dashboard.app import create_app
 
-    app = create_app()
+    app_flask = create_app()
     url = f"http://{host}:{port}"
 
     console.print(Panel.fit(
@@ -144,12 +174,11 @@ def config_ui(host: str, port: int, no_browser: bool) -> None:
         f"  • Set up message channels\n"
         f"  • Edit raw JSON config\n\n"
         f"Press Ctrl+C to stop",
-        title="🤖 chaobot Config",
+        title=f"{LOGO} chaobot Config",
         border_style="green"
     ))
 
     if not no_browser:
-        # Open browser after a short delay
         import threading
         def open_browser():
             import time
@@ -157,21 +186,24 @@ def config_ui(host: str, port: int, no_browser: bool) -> None:
             webbrowser.open(url)
         threading.Thread(target=open_browser, daemon=True).start()
 
-    app.run(host=host, port=port, debug=False)
+    app_flask.run(host=host, port=port, debug=False)
 
 
-@cli.group(name="session", invoke_without_command=True)
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=5000, help="Port to bind to")
-@click.pass_context
-def session_group(ctx, host: str, port: int) -> None:
+session_app = typer.Typer(name="session", help="Manage conversation sessions")
+app.add_typer(session_app, name="session")
+
+
+@session_app.callback(invoke_without_command=True)
+def session_main(
+    host: str = typer.Option("127.0.0.1", "--host", "-h"),
+    port: int = typer.Option(5000, "--port", "-p"),
+    ctx: typer.Context = typer.Context,
+) -> None:
     """Manage conversation sessions.
-    
+
     Without subcommand: Start web UI for session management.
-    With subcommand: Execute specific session command.
     """
     if ctx.invoked_subcommand is None:
-        # Start web UI by default
         try:
             from chaobot.dashboard.session_manager import run_manager
             run_manager(host=host, port=port)
@@ -179,12 +211,12 @@ def session_group(ctx, host: str, port: int) -> None:
             console.print(f"[red]Error: {e}[/red]")
             console.print("[yellow]Please install required dependencies:[/yellow]")
             console.print("  pip install flask")
+            raise typer.Exit(1)
 
 
-@session_group.command(name="list")
+@session_app.command(name="list")
 def session_list() -> None:
     """List all conversation sessions."""
-    import asyncio
     from chaobot.config.manager import ConfigManager
     from chaobot.agent.memory import MemoryManager
 
@@ -196,17 +228,20 @@ def session_list() -> None:
         console.print("No sessions found")
         return
 
-    console.print(Panel.fit(
-        "\n".join(f"  • {s}" for s in sorted(sessions)),
-        title="📝 Sessions",
-        border_style="blue"
-    ))
+    table = Table(title="📝 Sessions")
+    table.add_column("Session ID", style="cyan")
+
+    for s in sorted(sessions):
+        table.add_row(s)
+
+    console.print(table)
 
 
-@session_group.command(name="clear")
-@click.argument("session_id", required=False)
-@click.option("--all", "clear_all", is_flag=True, help="Clear all sessions")
-def session_clear(session_id: str | None, clear_all: bool) -> None:
+@session_app.command(name="clear")
+def session_clear(
+    session_id: Optional[str] = typer.Argument(None, help="Session ID to clear"),
+    clear_all: bool = typer.Option(False, "--all", "-a", help="Clear all sessions"),
+) -> None:
     """Clear conversation history for a session.
 
     Examples:
@@ -214,7 +249,6 @@ def session_clear(session_id: str | None, clear_all: bool) -> None:
         chaobot session clear mysession    # Clear specific session
         chaobot session clear --all        # Clear all sessions
     """
-    import asyncio
     from chaobot.config.manager import ConfigManager
     from chaobot.agent.memory import MemoryManager
 
@@ -232,19 +266,12 @@ def session_clear(session_id: str | None, clear_all: bool) -> None:
         console.print(f"✅ Cleared session: {sid}")
 
 
-@session_group.command(name="ui")
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=5000, help="Port to bind to")
-def session_ui(host: str, port: int) -> None:
-    """Start web interface for session management.
-
-    Provides a web UI to view, edit, and manage conversation sessions.
-
-    Examples:
-        chaobot session                    # Start on default port 5000
-        chaobot session --port 8080        # Start on port 8080
-        chaobot session --host 0.0.0.0     # Allow external access
-    """
+@session_app.command(name="ui")
+def session_ui(
+    host: str = typer.Option("127.0.0.1", "--host", "-h"),
+    port: int = typer.Option(5000, "--port", "-p"),
+) -> None:
+    """Start web interface for session management."""
     try:
         from chaobot.dashboard.session_manager import run_manager
         run_manager(host=host, port=port)
@@ -252,20 +279,20 @@ def session_ui(host: str, port: int) -> None:
         console.print(f"[red]Error: {e}[/red]")
         console.print("[yellow]Please install required dependencies:[/yellow]")
         console.print("  pip install flask")
+        raise typer.Exit(1)
 
 
-@cli.group(name="cron")
-def cron_group() -> None:
-    """Manage scheduled tasks."""
-    pass
+cron_app = typer.Typer(name="cron", help="Manage scheduled tasks")
+app.add_typer(cron_app, name="cron")
 
 
-@cron_group.command(name="add")
-@click.option("--name", required=True, help="Task name")
-@click.option("--message", required=True, help="Message to send")
-@click.option("--cron", help="Cron expression")
-@click.option("--every", type=int, help="Run every N seconds")
-def cron_add(name: str, message: str, cron: str | None, every: int | None) -> None:
+@cron_app.command(name="add")
+def cron_add(
+    name: str = typer.Option(..., "--name", "-n", help="Task name"),
+    message: str = typer.Option(..., "--message", "-m", help="Message to send"),
+    cron: Optional[str] = typer.Option(None, "--cron", "-c", help="Cron expression"),
+    every: Optional[int] = typer.Option(None, "--every", "-e", help="Run every N seconds"),
+) -> None:
     """Add a scheduled task."""
     from chaobot.cron.manager import CronManager
 
@@ -275,13 +302,13 @@ def cron_add(name: str, message: str, cron: str | None, every: int | None) -> No
     elif every:
         manager.add_interval(name, message, every)
     else:
-        click.echo("Either --cron or --every must be specified")
-        return
+        console.print("[red]Either --cron or --every must be specified[/red]")
+        raise typer.Exit(1)
 
     console.print(f"✅ Added task: {name}")
 
 
-@cron_group.command(name="list")
+@cron_app.command(name="list")
 def cron_list() -> None:
     """List scheduled tasks."""
     from chaobot.cron.manager import CronManager
@@ -293,13 +320,21 @@ def cron_list() -> None:
         console.print("No scheduled tasks")
         return
 
+    table = Table(title="⏰ Scheduled Tasks")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Schedule", style="yellow")
+
     for task in tasks:
-        console.print(f"  {task.id}: {task.name} - {task.schedule}")
+        table.add_row(str(task.id), task.name, task.schedule)
+
+    console.print(table)
 
 
-@cron_group.command(name="remove")
-@click.argument("task_id")
-def cron_remove(task_id: str) -> None:
+@cron_app.command(name="remove")
+def cron_remove(
+    task_id: str = typer.Argument(..., help="Task ID to remove"),
+) -> None:
     """Remove a scheduled task."""
     from chaobot.cron.manager import CronManager
 
@@ -308,6 +343,5 @@ def cron_remove(task_id: str) -> None:
     console.print(f"✅ Removed task: {task_id}")
 
 
-def main() -> None:
-    """Main entry point."""
-    cli()
+if __name__ == "__main__":
+    app()

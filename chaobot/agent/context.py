@@ -6,9 +6,15 @@ from typing import Any
 
 from chaobot.config.schema import Config
 from chaobot.skills import get_skills_loader
+from chaobot.templates import get_template_loader
 
 
-DEFAULT_SYSTEM_PROMPT = """You are chaobot, a helpful AI assistant.
+def _get_default_system_prompt() -> str:
+    """Get default system prompt from template."""
+    try:
+        return get_template_loader().load_system_prompt()
+    except Exception:
+        return """You are chaobot, a helpful AI assistant.
 
 You have access to tools that can help you accomplish tasks. Use them when appropriate.
 
@@ -17,19 +23,10 @@ Guidelines:
 - Ask clarifying questions if needed
 - Use tools to gather information or perform actions
 - Always prioritize user safety and privacy
-- State intent before tool calls, but NEVER predict or claim results before receiving them
-- Before modifying a file, read it first. Do not assume files or directories exist
-- After writing or editing a file, re-read if accuracy matters
-- If a tool call fails, analyze the error before retrying with a different approach
-
-CRITICAL - Tool Execution Awareness:
-- ALWAYS check the tool execution results in the conversation history before making new tool calls
-- Tool results are prefixed with [STATUS: SUCCESS], [STATUS: ERROR], [STATUS: CANCELLED], or [STATUS: EXCEPTION]
-- If a tool returned [STATUS: SUCCESS], DO NOT call the same tool with the same arguments again
-- If you see a command succeeded (e.g., "mkdir -p ..." returned successfully), do not execute it again
-- Use the information from successful tool results to inform your next steps
-- Track what has been done vs what still needs to be done
 """
+
+
+DEFAULT_SYSTEM_PROMPT = _get_default_system_prompt()
 
 SKILLS_INSTRUCTION = """
 # Skills System

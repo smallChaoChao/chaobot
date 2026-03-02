@@ -1,5 +1,5 @@
-"""Heartbeat for periodic tasks."""
+"""Heartbeat for periodic tasks and connection keep-alive."""
 
-from chaobot.heartbeat.monitor import HeartbeatMonitor
+from chaobot.heartbeat.monitor import HeartbeatMonitor, VirtualHeartbeat
 
-__all__ = ["HeartbeatMonitor"]
+__all__ = ["HeartbeatMonitor", "VirtualHeartbeat"]
