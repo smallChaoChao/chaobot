@@ -15,7 +15,7 @@ from chaobot.agent.memory import MemoryManager
 from chaobot.agent.tools.confirmation import ConfirmationManager, console_confirmation_callback
 from chaobot.config.manager import ConfigManager
 from chaobot.utils.progress import ProgressTracker, SimpleProgressTracker
-from chaobot.utils.prompt import create_prompt
+from chaobot.utils.prompt import create_prompt, HTML
 
 console = Console()
 
@@ -108,19 +108,39 @@ class AgentRunner:
     async def _run_single_stream(self, message: str) -> None:
         """Run a single message with streaming output.
 
+        Note: Streaming mode doesn't support tool calls well.
+        If tool calls are detected, it will fall back to non-streaming mode.
+
         Args:
             message: Message to send
         """
         console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
 
         full_content = ""
+        has_tool_calls = False
+
         try:
+            # First, try streaming
             async for chunk in self.loop.run_stream(message, session_id=self.session_id):
                 if chunk:
+                    # Check for tool call indicators in the stream
+                    if "<tool>" in chunk or "<function=" in chunk:
+                        has_tool_calls = True
+                        break
                     console.print(chunk, end="")
                     full_content += chunk
 
-            console.print()  # New line after streaming
+            if has_tool_calls:
+                # Fall back to non-streaming mode for tool calls
+                console.print("\n[dim]Detected tool call, switching to processing mode...[/dim]")
+                response = await self.loop.run(
+                    message,
+                    session_id=self.session_id,
+                    on_progress=None
+                )
+                self._display_response(response)
+            else:
+                console.print()  # New line after streaming
 
         except Exception as e:
             console.print(f"\n[bold red]Error: {e}[/bold red]")
@@ -195,8 +215,8 @@ class AgentRunner:
 
         while True:
             try:
-                # Use ANSI color for the prompt (prompt_toolkit doesn't support rich tags)
-                user_input = prompt.prompt(message="\033[1;32mYou:\033[0m ", multiline=False)
+                # Use prompt_toolkit HTML for colored prompt
+                user_input = prompt.prompt(message=HTML("<ansigreen><b>You:</b></ansigreen> "), multiline=False)
 
                 if not user_input:
                     continue
@@ -218,19 +238,39 @@ class AgentRunner:
     async def _run_interactive_stream(self, message: str) -> None:
         """Run interactive message with streaming output.
 
+        Note: Streaming mode doesn't support tool calls well.
+        If tool calls are detected, it will fall back to non-streaming mode.
+
         Args:
             message: User message
         """
         console.print("[bold cyan]chaobot:[/bold cyan] ", end="")
 
         full_content = ""
+        has_tool_calls = False
+
         try:
+            # First, try streaming
             async for chunk in self.loop.run_stream(message, session_id=self.session_id):
                 if chunk:
+                    # Check for tool call indicators in the stream
+                    if "<tool>" in chunk or "<function=" in chunk:
+                        has_tool_calls = True
+                        break
                     console.print(chunk, end="")
                     full_content += chunk
 
-            console.print()  # New line after streaming
+            if has_tool_calls:
+                # Fall back to non-streaming mode for tool calls
+                console.print("\n[dim]Detected tool call, switching to processing mode...[/dim]")
+                response = await self.loop.run(
+                    message,
+                    session_id=self.session_id,
+                    on_progress=None
+                )
+                self._display_response(response)
+            else:
+                console.print()  # New line after streaming
 
         except Exception as e:
             console.print(f"\n[bold red]Error: {e}[/bold red]")
