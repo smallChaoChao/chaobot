@@ -346,10 +346,11 @@ class LiteLLMProvider(BaseProvider):
         """Parse tool calls from text content.
 
         Supports multiple formats:
-        1. XML: <tool><name>xxx</name>...</tool>
-        2. XML: <function=xxx>...</function>
-        3. XML: <file_read>path</file_read>
-        4. Markdown: ```tool_call\\ntool_name\\n```
+        1. Markdown: ```tool_call\ntool_name arg_value\n```
+        2. Markdown: ```tool_call\ntool_name key=value\n```
+        3. XML: <tool><name>xxx</name>...</tool>
+        4. XML: <function=xxx>...</function>
+        5. XML: <file_read>path</file_read>
 
         Args:
             content: Response content
@@ -360,24 +361,52 @@ class LiteLLMProvider(BaseProvider):
         tool_calls = []
 
         # Try markdown format first (qwen uses this)
-        md_pattern = r"```tool_call\s*\n\s*(\w+)(?:\s+([^\n]+))?\s*\n"
+        # Format: ```tool_call\ntool_name arg1=value1 arg2=value2\n```
+        # Or: ```tool_call\ntool_name /path/to/file\n```
+        md_pattern = r"```tool_call\s*\n\s*(\w+)\s+([^\n]+)\s*\n"
         md_matches = re.findall(md_pattern, content, re.DOTALL)
         for match in md_matches:
             tool_name = match[0].strip()
+            arg_str = match[1].strip()
             args = {}
-            # Parse arguments if present (format: key1=value1 key2=value2)
-            if match[1]:
-                arg_str = match[1].strip()
-                # Try key=value format
+
+            # Try key=value format first
+            if "=" in arg_str:
                 for part in arg_str.split():
                     if "=" in part:
                         k, v = part.split("=", 1)
                         args[k.strip()] = v.strip()
+            else:
+                # Single positional argument
+                # Infer argument name from tool name
+                if tool_name == "file_read":
+                    args["path"] = arg_str
+                elif tool_name == "shell":
+                    args["command"] = arg_str
+                elif tool_name == "web_search":
+                    args["query"] = arg_str
+                elif tool_name == "web_fetch":
+                    args["url"] = arg_str
+                else:
+                    # Generic: use "input" as argument name
+                    args["input"] = arg_str
+
             tool_calls.append({
                 "id": f"call_{hash(tool_name + str(args)) & 0xFFFFFFFF}",
                 "name": tool_name,
                 "arguments": args
             })
+
+        # Also try format without arguments: ```tool_call\ntool_name\n```
+        if not tool_calls:
+            md_pattern2 = r"```tool_call\s*\n\s*(\w+)\s*\n"
+            md_matches2 = re.findall(md_pattern2, content, re.DOTALL)
+            for tool_name in md_matches2:
+                tool_calls.append({
+                    "id": f"call_{hash(tool_name) & 0xFFFFFFFF}",
+                    "name": tool_name.strip(),
+                    "arguments": {}
+                })
 
         if tool_calls:
             return tool_calls
