@@ -151,12 +151,9 @@ class AgentRunner:
             if has_tool_calls:
                 # Fall back to non-streaming mode for tool calls
                 console.print("\n[dim]Detected tool call, switching to processing mode...[/dim]")
-                response = await self.loop.run(
-                    message,
-                    session_id=self.session_id,
-                    on_progress=None
-                )
-                self._display_response(response)
+                # Use the same progress callback as _run_single_with_progress
+                # to ensure logs are displayed when show_logs is True
+                await self._run_single_with_progress(message)
             else:
                 console.print()  # New line after streaming
 
@@ -299,12 +296,9 @@ class AgentRunner:
             if has_tool_calls:
                 # Fall back to non-streaming mode for tool calls
                 console.print("\n[dim]Detected tool call, switching to processing mode...[/dim]")
-                response = await self.loop.run(
-                    message,
-                    session_id=self.session_id,
-                    on_progress=None
-                )
-                self._display_response(response)
+                # Use the same progress callback as _run_interactive_with_progress
+                # to ensure logs are displayed when show_logs is True
+                response = await self._run_interactive_with_progress(message)
             else:
                 console.print()  # New line after streaming
 

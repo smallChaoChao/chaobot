@@ -142,6 +142,53 @@ class ContextBuilder:
         if skills_summary:
             system_prompt += f"\n\n{SKILLS_INSTRUCTION}{skills_summary}\n\n---\n\nWhen you need to perform a task, first check if there's a relevant skill above. If so, read its SKILL.md file using the file_read tool to learn how to use it."
 
+        # Add tool definitions to system prompt for models without native tool calling support
+        # This ensures models like qwen know how to use tools
+        if tools:
+            system_prompt += "\n\n# Available Tools\n\n"
+            system_prompt += "You have access to the following tools. Use them when appropriate:\n\n"
+            for tool in tools:
+                tool_name = tool.get("name", "")
+                tool_desc = tool.get("description", "")
+                params = tool.get("parameters", {})
+                system_prompt += f"## {tool_name}\n"
+                system_prompt += f"Description: {tool_desc}\n"
+                if params and "properties" in params:
+                    system_prompt += "Parameters:\n"
+                    for param_name, param_info in params["properties"].items():
+                        param_desc = param_info.get("description", "")
+                        param_type = param_info.get("type", "string")
+                        required = param_name in params.get("required", [])
+                        req_marker = " (required)" if required else ""
+                        system_prompt += f"  - {param_name}: {param_desc} ({param_type}){req_marker}\n"
+                system_prompt += "\n"
+
+            # Add tool calling format instructions for non-native tool calling models
+            system_prompt += """# Tool Calling Format
+
+To use a tool, output the tool call in XML format:
+
+<tool>
+<tool_name>tool_name_here</tool_name>
+<param1>value1</param1>
+<param2>value2</param2>
+</tool>
+
+For example, to read a file:
+<tool>
+<tool_name>file_read</tool_name>
+<path>/path/to/file</path>
+</tool>
+
+To execute a shell command:
+<tool>
+<tool_name>shell</tool_name>
+<command>your command here</command>
+</tool>
+
+The system will execute the tool and return the result.
+"""
+
         # Build system message with tools
         system_msg = {"role": "system", "content": system_prompt}
         if tools:
